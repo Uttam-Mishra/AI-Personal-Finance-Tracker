@@ -7,6 +7,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pdfplumber
 import re
+import json
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import pandas as pd
@@ -28,6 +29,12 @@ except Exception as ocr_err:
 
 app = Flask(__name__)
 CORS(app)
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, 'transaction_classifier.pkl')
+LEARNED_FEEDBACK_PATH = os.path.join(BASE_DIR, 'learned_corrections.json')
+UPLOADS_DIR = os.path.join(BASE_DIR, 'uploads')
+CONFIDENCE_THRESHOLD = 0.6
 
 # Training data for ML model
 TRAINING_DATA = [
@@ -108,29 +115,70 @@ TRAINING_DATA = [
     ("Wallet transfer", "Transfer"),
 ]
 
-# Train ML Model
-def train_model():
-    """Train and save the ML categorization model"""
-    descriptions = [item[0] for item in TRAINING_DATA]
-    categories = [item[1] for item in TRAINING_DATA]
-    
-    # Create pipeline with TF-IDF vectorizer and Naive Bayes classifier
+CATEGORY_OPTIONS = sorted({item[1] for item in TRAINING_DATA})
+
+def normalize_description(text):
+    normalized = re.sub(r'[^a-z0-9\s]', ' ', str(text).lower())
+    normalized = re.sub(r'\s+', ' ', normalized).strip()
+    return normalized
+
+
+def load_feedback_data():
+    if not os.path.exists(LEARNED_FEEDBACK_PATH):
+        return []
+    try:
+        with open(LEARNED_FEEDBACK_PATH, 'r', encoding='utf-8') as file:
+            data = json.load(file)
+            return data if isinstance(data, list) else []
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def save_feedback_data(entries):
+    with open(LEARNED_FEEDBACK_PATH, 'w', encoding='utf-8') as file:
+        json.dump(entries, file, indent=2)
+
+
+def build_model(training_pairs):
+    descriptions = [item[0] for item in training_pairs]
+    categories = [item[1] for item in training_pairs]
+
     model = Pipeline([
-        ('tfidf', TfidfVectorizer(ngram_range=(1, 2), max_features=100)),
+        ('tfidf', TfidfVectorizer(ngram_range=(1, 2), max_features=250)),
         ('classifier', MultinomialNB())
     ])
-    
     model.fit(descriptions, categories)
-    
-    # Save model
-    joblib.dump(model, 'transaction_classifier.pkl')
     return model
 
-# Load or train model
-if os.path.exists('transaction_classifier.pkl'):
-    ml_model = joblib.load('transaction_classifier.pkl')
-else:
-    ml_model = train_model()
+
+def rebuild_model():
+    global ml_model
+    feedback_entries = load_feedback_data()
+    learned_pairs = []
+    for item in feedback_entries:
+        description = item.get('description', '').strip()
+        category = item.get('category', '').strip()
+        if description and category:
+            learned_pairs.append((description, category))
+
+    training_pairs = TRAINING_DATA + learned_pairs
+    ml_model = build_model(training_pairs)
+    joblib.dump(ml_model, MODEL_PATH)
+    return ml_model
+
+
+def get_learned_category(description):
+    normalized = normalize_description(description)
+    if not normalized:
+        return None
+
+    for item in load_feedback_data():
+        if item.get('normalized_description') == normalized:
+            return item.get('category')
+    return None
+
+
+ml_model = rebuild_model()
 
 DATE_PATTERNS = [
     r'\b\d{2}/\d{2}/\d{4}\b',
@@ -672,16 +720,68 @@ def _pdf_text_length(pdf_path):
     return total_chars
 
 def categorize_transaction(description):
-    """Use ML model to categorize transaction"""
+    """Categorize transaction using learned feedback first, then ML."""
+    learned_category = get_learned_category(description)
+    if learned_category:
+        return {
+            'category': learned_category,
+            'confidence': 1.0,
+            'needs_review': False,
+            'suggested_category': learned_category,
+            'source': 'learned-feedback'
+        }
+
     try:
-        category = ml_model.predict([description])[0]
-        # Get prediction probability for confidence score
+        predicted_category = ml_model.predict([description])[0]
         probabilities = ml_model.predict_proba([description])[0]
         confidence = max(probabilities)
-        
-        return category, round(confidence, 2)
-    except:
-        return "Other", 0.5
+
+        needs_review = confidence < CONFIDENCE_THRESHOLD
+        category = 'Unknown' if needs_review else predicted_category
+        return {
+            'category': category,
+            'confidence': round(confidence, 2),
+            'needs_review': needs_review,
+            'suggested_category': predicted_category,
+            'source': 'ml-model'
+        }
+    except Exception:
+        return {
+            'category': 'Unknown',
+            'confidence': 0.0,
+            'needs_review': True,
+            'suggested_category': 'Other',
+            'source': 'fallback'
+        }
+
+
+def learn_transaction_category(description, category):
+    normalized = normalize_description(description)
+    if not normalized:
+        raise ValueError('Description is required.')
+    if category not in CATEGORY_OPTIONS:
+        raise ValueError('Invalid category selected.')
+
+    feedback_entries = load_feedback_data()
+    updated = False
+    for item in feedback_entries:
+        if item.get('normalized_description') == normalized:
+            item['description'] = description
+            item['category'] = category
+            item['updated_at'] = datetime.utcnow().isoformat(timespec='seconds')
+            updated = True
+            break
+
+    if not updated:
+        feedback_entries.append({
+            'description': description,
+            'normalized_description': normalized,
+            'category': category,
+            'updated_at': datetime.utcnow().isoformat(timespec='seconds')
+        })
+
+    save_feedback_data(feedback_entries)
+    rebuild_model()
 
 @app.route('/api/upload', methods=['POST'])
 def upload_statement():
@@ -696,8 +796,8 @@ def upload_statement():
     
     # Save uploaded file temporarily
     safe_name = secure_filename(file.filename or 'statement.pdf')
-    upload_path = f'uploads/{safe_name}'
-    os.makedirs('uploads', exist_ok=True)
+    upload_path = os.path.join(UPLOADS_DIR, safe_name)
+    os.makedirs(UPLOADS_DIR, exist_ok=True)
     file.save(upload_path)
     
     try:
@@ -727,9 +827,12 @@ def upload_statement():
         
         # Apply ML categorization
         for txn in transactions:
-            category, confidence = categorize_transaction(txn['description'])
-            txn['category'] = category
-            txn['confidence'] = confidence
+            category_data = categorize_transaction(txn['description'])
+            txn['category'] = category_data['category']
+            txn['confidence'] = category_data['confidence']
+            txn['needs_review'] = category_data['needs_review']
+            txn['suggested_category'] = category_data['suggested_category']
+            txn['learning_source'] = category_data['source']
             txn['id'] = hash(f"{txn['date']}{txn['description']}{txn['amount']}")
         
         # Clean up uploaded file
@@ -749,29 +852,55 @@ def categorize():
     """Categorize a single transaction description"""
     data = request.json
     description = data.get('description', '')
-    
-    category, confidence = categorize_transaction(description)
-    
+
+    return jsonify(categorize_transaction(description))
+
+
+@app.route('/api/feedback', methods=['POST'])
+def save_feedback():
+    """Store a user correction and rebuild the model."""
+    data = request.json or {}
+    description = data.get('description', '').strip()
+    category = data.get('category', '').strip()
+
+    if not description:
+        return jsonify({'error': 'Description is required.'}), 400
+    if not category:
+        return jsonify({'error': 'Category is required.'}), 400
+
+    try:
+        learn_transaction_category(description, category)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+
     return jsonify({
+        'success': True,
         'category': category,
-        'confidence': confidence
+        'message': 'Correction saved. Future matching transactions will use this category.'
     })
 
 @app.route('/api/retrain', methods=['POST'])
 def retrain_model():
     """Retrain model with new data"""
+    global ml_model
     data = request.json
     new_training_data = data.get('training_data', [])
     
-    # Add new data to existing training data
-    all_data = TRAINING_DATA + [(item['description'], item['category']) for item in new_training_data]
-    
-    descriptions = [item[0] for item in all_data]
-    categories = [item[1] for item in all_data]
-    
-    # Retrain model
-    ml_model.fit(descriptions, categories)
-    joblib.dump(ml_model, 'transaction_classifier.pkl')
+    feedback_entries = load_feedback_data()
+    for item in new_training_data:
+        description = item.get('description', '').strip()
+        category = item.get('category', '').strip()
+        if not description or category not in CATEGORY_OPTIONS:
+            continue
+        feedback_entries.append({
+            'description': description,
+            'normalized_description': normalize_description(description),
+            'category': category,
+            'updated_at': datetime.utcnow().isoformat(timespec='seconds')
+        })
+
+    save_feedback_data(feedback_entries)
+    ml_model = rebuild_model()
     
     return jsonify({
         'success': True,
@@ -819,12 +948,14 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'model_loaded': ml_model is not None,
-        'categories': list(set([item[1] for item in TRAINING_DATA]))
+        'categories': CATEGORY_OPTIONS,
+        'confidence_threshold': CONFIDENCE_THRESHOLD,
+        'learned_corrections': len(load_feedback_data())
     })
 
 if __name__ == '__main__':
     # Ensure uploads directory exists
-    os.makedirs('uploads', exist_ok=True)
+    os.makedirs(UPLOADS_DIR, exist_ok=True)
     
     print("🚀 AI Finance Tracker Backend Starting...")
     print("📊 ML Model Ready with", len(set([item[1] for item in TRAINING_DATA])), "categories")

@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900">
+  <defs>
+    <style>
+      .title { font: 700 28px Arial, sans-serif; fill: #1f2937; }
+      .label { font: 600 20px Arial, sans-serif; fill: #111827; }
+      .small { font: 500 16px Arial, sans-serif; fill: #374151; }
+      .actor { fill: #fff7ed; stroke: #ea580c; stroke-width: 3; }
+      .system { fill: #f8fafc; stroke: #2563eb; stroke-width: 4; rx: 24; }
+      .usecase { fill: #ffffff; stroke: #334155; stroke-width: 2.5; }
+      .arrow { stroke: #475569; stroke-width: 2.5; fill: none; marker-end: url(#arrowhead); }
+      .improve { stroke: #7c3aed; stroke-width: 2.5; fill: none; marker-end: url(#arrowheadPurple); }
+      .include { stroke-dasharray: 8 6; }
+      .note { font: italic 15px Arial, sans-serif; fill: #6b7280; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#475569"/>
+    </marker>
+    <marker id="arrowheadPurple" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#7c3aed"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1400" height="900" fill="#ffffff"/>
+  <text x="700" y="55" text-anchor="middle" class="title">Use Case Diagram - AI-Powered UPI Finance Tracker</text>
+
+  <rect x="370" y="110" width="760" height="650" class="system"/>
+  <text x="750" y="150" text-anchor="middle" class="label">AI-Powered UPI Finance Tracker System</text>
+
+  <g transform="translate(100,240)">
+    <circle cx="70" cy="40" r="28" class="actor"/>
+    <line x1="70" y1="68" x2="70" y2="150" stroke="#ea580c" stroke-width="4"/>
+    <line x1="25" y1="100" x2="115" y2="100" stroke="#ea580c" stroke-width="4"/>
+    <line x1="70" y1="150" x2="30" y2="220" stroke="#ea580c" stroke-width="4"/>
+    <line x1="70" y1="150" x2="110" y2="220" stroke="#ea580c" stroke-width="4"/>
+    <text x="70" y="255" text-anchor="middle" class="label">User</text>
+  </g>
+
+  <g transform="translate(1170,290)">
+    <circle cx="70" cy="40" r="28" class="actor"/>
+    <line x1="70" y1="68" x2="70" y2="150" stroke="#ea580c" stroke-width="4"/>
+    <line x1="25" y1="100" x2="115" y2="100" stroke="#ea580c" stroke-width="4"/>
+    <line x1="70" y1="150" x2="30" y2="220" stroke="#ea580c" stroke-width="4"/>
+    <line x1="70" y1="150" x2="110" y2="220" stroke="#ea580c" stroke-width="4"/>
+    <text x="70" y="255" text-anchor="middle" class="label">Admin</text>
+  </g>
+
+  <ellipse cx="560" cy="240" rx="140" ry="42" class="usecase"/>
+  <text x="560" y="247" text-anchor="middle" class="label">Upload Statement</text>
+
+  <ellipse cx="840" cy="240" rx="150" ry="42" class="usecase"/>
+  <text x="840" y="247" text-anchor="middle" class="label">Parse PDF Statement</text>
+
+  <ellipse cx="560" cy="370" rx="155" ry="42" class="usecase"/>
+  <text x="560" y="377" text-anchor="middle" class="label">Categorize Transactions</text>
+
+  <ellipse cx="840" cy="370" rx="125" ry="42" class="usecase"/>
+  <text x="840" y="377" text-anchor="middle" class="label">View Dashboard</text>
+
+  <ellipse cx="560" cy="500" rx="135" ry="42" class="usecase"/>
+  <text x="560" y="507" text-anchor="middle" class="label">Analyze Spending</text>
+
+  <ellipse cx="840" cy="500" rx="160" ry="42" class="usecase"/>
+  <text x="840" y="507" text-anchor="middle" class="label">Predict Future Expenses</text>
+
+  <ellipse cx="700" cy="625" rx="120" ry="42" class="usecase"/>
+  <text x="700" y="632" text-anchor="middle" class="label">Export Report</text>
+
+  <ellipse cx="1020" cy="625" rx="100" ry="42" class="usecase"/>
+  <text x="1020" y="632" text-anchor="middle" class="label">Retrain Model</text>
+
+  <path d="M240 340 C320 310, 390 275, 430 255" class="arrow"/>
+  <path d="M240 365 C320 365, 390 365, 405 370" class="arrow"/>
+  <path d="M240 390 C330 430, 400 470, 430 490" class="arrow"/>
+  <path d="M240 410 C360 455, 520 570, 610 610" class="arrow"/>
+
+  <path d="M1110 420 C1090 500, 1060 565, 1035 600" class="arrow"/>
+
+  <path d="M700 240 C720 240, 760 240, 690 240" class="arrow include"/>
+  <path d="M650 370 C700 330, 760 285, 785 255" class="arrow include"/>
+  <path d="M685 500 C730 500, 770 500, 680 500" class="arrow include"/>
+  <path d="M840 542 C840 565, 775 590, 735 607" class="arrow include"/>
+
+  <path d="M920 625 C900 625, 760 625, 715 625" class="improve"/>
+  <text x="865" y="602" text-anchor="middle" class="small" fill="#7c3aed">improves categorization</text>
+
+  <text x="720" y="215" text-anchor="middle" class="note">includes</text>
+  <text x="720" y="333" text-anchor="middle" class="note">depends on parsing</text>
+  <text x="735" y="478" text-anchor="middle" class="note">uses analytics</text>
+
+  <text x="700" y="810" text-anchor="middle" class="small">Primary actor: User | Secondary actor: Admin/Developer</text>
+</svg>

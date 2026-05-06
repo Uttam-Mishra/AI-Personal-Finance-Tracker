@@ -214,6 +214,11 @@ td:last-child {
   color: #1e40af;
 }
 
+.badge.unknown {
+  background: #fef3c7;
+  color: #92400e;
+}
+
 .amount-credit {
   color: #059669;
   font-weight: 600;
@@ -316,6 +321,59 @@ td:last-child {
   margin-top: 24px;
 }
 
+.review-banner {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  padding: 12px 16px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  font-weight: 600;
+}
+
+.review-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #92400e;
+}
+
+.review-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.category-select {
+  min-width: 170px;
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #1f2937;
+  font-size: 13px;
+}
+
+.save-btn {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: #0f766e;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.save-btn:disabled {
+  background: #94a3b8;
+  cursor: not-allowed;
+}
+
+.review-status {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
 .error-banner {
   background: #fee2e2;
   color: #991b1b;
@@ -329,5 +387,14 @@ td:last-child {
 @media (max-width: 768px) {
   .grid-2 {
     grid-template-columns: 1fr;
+  }
+
+  .review-controls {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .category-select {
+    min-width: 100%;
   }
 }

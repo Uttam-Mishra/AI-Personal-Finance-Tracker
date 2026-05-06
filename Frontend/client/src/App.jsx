@@ -85,6 +85,19 @@ const AlertCircle = () => (
 );
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
+const CATEGORY_OPTIONS = [
+  'Bills & Utilities',
+  'Education',
+  'Entertainment',
+  'Food & Dining',
+  'Healthcare',
+  'Investment',
+  'Salary',
+  'Shopping',
+  'Transfer',
+  'Transportation',
+  'Other'
+];
 
 const categoryRules = {
   'Food & Dining': ['swiggy', 'zomato', 'restaurant', 'cafe', 'food', 'dominos', 'pizza'],
@@ -96,6 +109,7 @@ const categoryRules = {
   Education: ['course', 'udemy', 'coursera', 'book', 'education', 'tuition'],
   Salary: ['salary', 'payroll', 'income', 'credited'],
   Investment: ['mutual fund', 'stock', 'sip', 'investment', 'zerodha', 'groww'],
+  Transfer: ['transfer', 'upi', 'bank'],
   Other: []
 };
 
@@ -141,16 +155,28 @@ const buildMockTransactions = () =>
     id: Date.now() + index,
     ...txn,
     category: categorizeMockML(txn.description),
-    confidence: Number((Math.random() * 0.3 + 0.7).toFixed(2))
+    confidence: Number((Math.random() * 0.3 + 0.7).toFixed(2)),
+    needs_review: false,
+    suggested_category: categorizeMockML(txn.description),
+    learning_source: 'demo'
   }));
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
+
+const normalizeDescription = (value) =>
+  String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 
 function App() {
   const [transactions, setTransactions] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [error, setError] = useState('');
+  const [correctionDrafts, setCorrectionDrafts] = useState({});
+  const [savingCorrectionId, setSavingCorrectionId] = useState(null);
 
   const { totalIncome, totalExpenses, balance } = useMemo(() => {
     const income = transactions
@@ -199,6 +225,7 @@ function App() {
 
     setIsProcessing(true);
     setError('');
+    setCorrectionDrafts({});
 
     try {
       const formData = new FormData();
@@ -231,7 +258,71 @@ function App() {
 
   const handleLoadDemo = () => {
     setError('');
+    setCorrectionDrafts({});
     setTransactions(buildMockTransactions());
+  };
+
+  const handleCorrectionChange = (transactionId, category) => {
+    setCorrectionDrafts((current) => ({
+      ...current,
+      [transactionId]: category
+    }));
+  };
+
+  const handleSaveCorrection = async (transaction) => {
+    const selectedCategory =
+      correctionDrafts[transaction.id] ||
+      (transaction.category !== 'Unknown' ? transaction.category : transaction.suggested_category) ||
+      '';
+
+    if (!selectedCategory) {
+      setError('Select a category before saving the correction.');
+      return;
+    }
+
+    setSavingCorrectionId(transaction.id);
+    setError('');
+
+    try {
+      const response = await fetch(`${API_BASE}/api/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          description: transaction.description,
+          category: selectedCategory
+        })
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Could not save the correction.');
+      }
+
+      const targetDescription = normalizeDescription(transaction.description);
+      setTransactions((current) =>
+        current.map((item) =>
+          normalizeDescription(item.description) === targetDescription
+            ? {
+                ...item,
+                category: selectedCategory,
+                confidence: 1,
+                needs_review: false,
+                suggested_category: selectedCategory,
+                learning_source: 'learned-feedback'
+              }
+            : item
+        )
+      );
+      setCorrectionDrafts((current) => {
+        const next = { ...current };
+        delete next[transaction.id];
+        return next;
+      });
+    } catch (err) {
+      setError(err?.message || 'Could not save the correction.');
+    } finally {
+      setSavingCorrectionId(null);
+    }
   };
 
   const averageConfidence =
@@ -247,6 +338,7 @@ function App() {
     ['fetch', 'network', 'backend', 'connect', 'cors', 'failed'].some((term) =>
       error.toLowerCase().includes(term)
     );
+  const needsReviewCount = transactions.filter((txn) => txn.needs_review).length;
 
   return (
     <div className="container">
@@ -403,6 +495,12 @@ function App() {
             <FileTextIcon />
             Recent Transactions ({transactions.length})
           </div>
+          {needsReviewCount > 0 ? (
+            <div className="review-banner">
+              {needsReviewCount} transaction{needsReviewCount > 1 ? 's' : ''} need review. Save a correction once and the
+              system will reuse it for future matching descriptions.
+            </div>
+          ) : null}
           {transactions.length === 0 ? (
             <div className="empty-state">
               <AlertCircle />
@@ -422,6 +520,7 @@ function App() {
                     <th>Description</th>
                     <th>Category</th>
                     <th>Confidence</th>
+                    <th>Review</th>
                     <th>Amount</th>
                   </tr>
                 </thead>
@@ -431,9 +530,49 @@ function App() {
                       <td style={{ color: '#6b7280' }}>{txn.date}</td>
                       <td style={{ color: '#1f2937' }}>{txn.description}</td>
                       <td>
-                        <span className="badge">{txn.category}</span>
+                        <span className={`badge ${txn.needs_review ? 'unknown' : ''}`}>{txn.category}</span>
+                        {txn.needs_review && txn.suggested_category ? (
+                          <div className="review-hint">Suggested: {txn.suggested_category}</div>
+                        ) : null}
                       </td>
-                      <td style={{ color: '#6b7280' }}>{Math.round(txn.confidence * 100)}%</td>
+                      <td style={{ color: '#6b7280' }}>
+                        {Math.round(txn.confidence * 100)}%
+                        {txn.needs_review ? ' (low)' : ''}
+                      </td>
+                      <td>
+                        {txn.needs_review ? (
+                          <div className="review-controls">
+                            <select
+                              className="category-select"
+                              value={
+                                correctionDrafts[txn.id] ||
+                                (txn.category !== 'Unknown' ? txn.category : txn.suggested_category || '')
+                              }
+                              onChange={(event) => handleCorrectionChange(txn.id, event.target.value)}
+                              disabled={savingCorrectionId === txn.id}
+                            >
+                              <option value="">Select category</option>
+                              {CATEGORY_OPTIONS.map((category) => (
+                                <option key={category} value={category}>
+                                  {category}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              className="save-btn"
+                              onClick={() => handleSaveCorrection(txn)}
+                              disabled={savingCorrectionId === txn.id}
+                            >
+                              {savingCorrectionId === txn.id ? 'Saving...' : 'Save'}
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="review-status">
+                            {txn.learning_source === 'learned-feedback' ? 'Learned' : 'OK'}
+                          </span>
+                        )}
+                      </td>
                       <td className={txn.type === 'credit' ? 'amount-credit' : 'amount-debit'}>
                         {txn.type === 'credit' ? '+' : '-'}₹{Math.abs(txn.amount).toLocaleString()}
                       </td>
