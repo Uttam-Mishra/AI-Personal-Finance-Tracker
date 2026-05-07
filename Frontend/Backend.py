@@ -947,6 +947,15 @@ def get_analytics():
         'transaction_count': len(transactions)
     })
 
+@app.route('/', methods=['GET'])
+def index():
+    """Basic landing response for hosted API checks."""
+    return jsonify({
+        'name': 'AI Personal Finance Tracker API',
+        'status': 'running',
+        'health': '/api/health'
+    })
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
