@@ -31,10 +31,12 @@ app = Flask(__name__)
 CORS(app)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, 'transaction_classifier.pkl')
-LEARNED_FEEDBACK_PATH = os.path.join(BASE_DIR, 'learned_corrections.json')
+RUNTIME_DATA_DIR = os.path.join(BASE_DIR, 'runtime_data')
+MODEL_PATH = os.path.join(RUNTIME_DATA_DIR, 'transaction_classifier.pkl')
+LEARNED_FEEDBACK_PATH = os.path.join(RUNTIME_DATA_DIR, 'learned_corrections.json')
 UPLOADS_DIR = os.path.join(BASE_DIR, 'uploads')
 CONFIDENCE_THRESHOLD = 0.6
+DEFAULT_PORT = int(os.environ.get('PORT', 5001))
 
 # Training data for ML model
 TRAINING_DATA = [
@@ -124,6 +126,7 @@ def normalize_description(text):
 
 
 def load_feedback_data():
+    os.makedirs(RUNTIME_DATA_DIR, exist_ok=True)
     if not os.path.exists(LEARNED_FEEDBACK_PATH):
         return []
     try:
@@ -135,6 +138,7 @@ def load_feedback_data():
 
 
 def save_feedback_data(entries):
+    os.makedirs(RUNTIME_DATA_DIR, exist_ok=True)
     with open(LEARNED_FEEDBACK_PATH, 'w', encoding='utf-8') as file:
         json.dump(entries, file, indent=2)
 
@@ -153,6 +157,7 @@ def build_model(training_pairs):
 
 def rebuild_model():
     global ml_model
+    os.makedirs(RUNTIME_DATA_DIR, exist_ok=True)
     feedback_entries = load_feedback_data()
     learned_pairs = []
     for item in feedback_entries:
@@ -956,9 +961,10 @@ def health_check():
 if __name__ == '__main__':
     # Ensure uploads directory exists
     os.makedirs(UPLOADS_DIR, exist_ok=True)
+    os.makedirs(RUNTIME_DATA_DIR, exist_ok=True)
     
     print("🚀 AI Finance Tracker Backend Starting...")
     print("📊 ML Model Ready with", len(set([item[1] for item in TRAINING_DATA])), "categories")
-    print("🌐 Server running on http://localhost:5001")
+    print(f"🌐 Server running on http://localhost:{DEFAULT_PORT}")
     
-    app.run(debug=True, host='0.0.0.0', port=5001)
+    app.run(debug=True, host='0.0.0.0', port=DEFAULT_PORT)

@@ -1,0 +1,26 @@
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Runtime-generated backend files
+/Frontend/runtime_data/
+/Frontend/uploads/
+/Frontend/learned_corrections.json
+/Frontend/transaction_classifier.pkl
+/transaction_classifier.pkl
+
+# Frontend build output
+/Frontend/client/node_modules/
+/Frontend/client/dist/
+/Frontend/client/.env
+/Frontend/client/.env.local
+
+# Local editor/project files
+.vscode/
+.idea/
+*.log
