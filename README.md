@@ -70,3 +70,40 @@ The backend now writes generated files into `/Users/uttammishra/IP PROJECT/Front
 - `learned_corrections.json`
 
 Uploaded PDFs are stored temporarily in `/Users/uttammishra/IP PROJECT/Frontend/uploads`, which is also ignored by Git.
+
+## Android App
+
+The React frontend is also configured as an Android app using Capacitor.
+
+Install dependencies:
+
+```bash
+cd "/Users/uttammishra/IP PROJECT/Frontend/client"
+npm install
+```
+
+For a real phone build, create `.env.production` with your Render backend URL:
+
+```bash
+VITE_API_BASE_URL=https://your-render-service.onrender.com
+```
+
+Build and sync Android:
+
+```bash
+npm run android:sync
+```
+
+Open in Android Studio:
+
+```bash
+npm run android:open
+```
+
+Build a debug APK:
+
+```bash
+npm run android:apk
+```
+
+The debug APK is generated at `/Users/uttammishra/IP PROJECT/Frontend/client/android/app/build/outputs/apk/debug/app-debug.apk`.

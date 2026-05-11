@@ -13,6 +13,7 @@ env/
 /Frontend/learned_corrections.json
 /Frontend/transaction_classifier.pkl
 /transaction_classifier.pkl
+*.apk
 
 # Frontend build output
 /Frontend/client/node_modules/

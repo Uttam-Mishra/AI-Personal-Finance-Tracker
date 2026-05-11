@@ -1,0 +1,12 @@
+{
+  "appId": "com.uttammishra.aipersonalfinancetracker",
+  "appName": "AI Personal Finance Tracker",
+  "webDir": "dist",
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1200,
+      "backgroundColor": "#ffffff",
+      "showSpinner": false
+    }
+  }
+}
