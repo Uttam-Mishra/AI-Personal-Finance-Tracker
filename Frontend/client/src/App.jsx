@@ -161,7 +161,10 @@ const buildMockTransactions = () =>
     learning_source: 'demo'
   }));
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
+const DEFAULT_API_BASE = import.meta.env.PROD
+  ? 'https://ai-personal-finance-tracker-api.onrender.com'
+  : 'http://localhost:5001';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE;
 
 const normalizeDescription = (value) =>
   String(value || '')
