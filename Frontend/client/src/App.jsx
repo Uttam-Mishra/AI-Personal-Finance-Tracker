@@ -1,90 +1,67 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
-  LineChart,
-  Line,
-  BarChart,
+  AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
+  BarChart3,
+  Bell,
+  Bot,
+  BrainCircuit,
+  Calendar,
+  Car,
+  CheckCircle2,
+  ChevronDown,
+  CreditCard,
+  FileText,
+  Film,
+  GraduationCap,
+  HeartPulse,
+  HelpCircle,
+  Home,
+  IndianRupee,
+  Landmark,
+  LayoutDashboard,
+  Menu,
+  Moon,
+  PiggyBank,
+  ReceiptText,
+  Search,
+  Send,
+  Settings,
+  ShieldCheck,
+  ShoppingBag,
+  SlidersHorizontal,
+  Sparkles,
+  Sun,
+  Target,
+  TrendingDown,
+  TrendingUp,
+  UploadCloud,
+  Utensils,
+  Wallet,
+  X,
+  Zap
+} from 'lucide-react';
+import {
+  Area,
+  AreaChart,
   Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
+  BarChart,
   CartesianGrid,
-  Tooltip,
+  Cell,
   Legend,
-  ResponsiveContainer
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis
 } from 'recharts';
 import './App.css';
 
-const UploadIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
-  </svg>
-);
-
-const TrendingUp = () => (
-  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
-    <polyline points="17 6 23 6 23 12" />
-  </svg>
-);
-
-const TrendingDown = () => (
-  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <polyline points="23 18 13.5 8.5 8.5 13.5 1 6" />
-    <polyline points="17 18 23 18 23 12" />
-  </svg>
-);
-
-const Wallet = ({ size = 32 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
-    <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
-    <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
-  </svg>
-);
-
-const CalendarIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-    <line x1="16" y1="2" x2="16" y2="6" />
-    <line x1="8" y1="2" x2="8" y2="6" />
-    <line x1="3" y1="10" x2="21" y2="10" />
-  </svg>
-);
-
-const PieChartIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
-    <path d="M22 12A10 10 0 0 0 12 2v10z" />
-  </svg>
-);
-
-const TagIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
-    <line x1="7" y1="7" x2="7.01" y2="7" />
-  </svg>
-);
-
-const FileTextIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-    <polyline points="14 2 14 8 20 8" />
-    <line x1="16" y1="13" x2="8" y2="13" />
-    <line x1="16" y1="17" x2="8" y2="17" />
-  </svg>
-);
-
-const AlertCircle = () => (
-  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <circle cx="12" cy="12" r="10" />
-    <line x1="12" y1="8" x2="12" y2="12" />
-    <line x1="12" y1="16" x2="12.01" y2="16" />
-  </svg>
-);
-
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
 const CATEGORY_OPTIONS = [
   'Bills & Utilities',
   'Education',
@@ -114,31 +91,86 @@ const categoryRules = {
 };
 
 const mockTransactions = [
-  { date: '2024-02-01', description: 'Swiggy Food Order', amount: -450, type: 'debit' },
-  { date: '2024-02-01', description: 'Salary Credited', amount: 50000, type: 'credit' },
-  { date: '2024-02-02', description: 'Uber Ride', amount: -180, type: 'debit' },
-  { date: '2024-02-02', description: 'Amazon Shopping', amount: -2500, type: 'debit' },
-  { date: '2024-02-03', description: 'Netflix Subscription', amount: -199, type: 'debit' },
-  { date: '2024-02-03', description: 'Electricity Bill', amount: -1200, type: 'debit' },
-  { date: '2024-02-04', description: 'Zomato Order', amount: -380, type: 'debit' },
-  { date: '2024-02-05', description: 'Petrol Pump', amount: -2000, type: 'debit' },
-  { date: '2024-02-05', description: 'Apollo Pharmacy', amount: -560, type: 'debit' },
-  { date: '2024-02-06', description: 'Mobile Recharge', amount: -299, type: 'debit' },
-  { date: '2024-02-07', description: 'Myntra Shopping', amount: -1800, type: 'debit' },
-  { date: '2024-02-08', description: 'Ola Cab', amount: -250, type: 'debit' },
-  { date: '2024-02-09', description: 'Dominos Pizza', amount: -499, type: 'debit' },
-  { date: '2024-02-10', description: 'Udemy Course', amount: -799, type: 'debit' },
-  { date: '2024-02-11', description: 'Flipkart Order', amount: -3200, type: 'debit' },
-  { date: '2024-02-12', description: 'Internet Bill', amount: -699, type: 'debit' },
-  { date: '2024-02-13', description: 'Movie Tickets', amount: -600, type: 'debit' },
-  { date: '2024-02-14', description: 'Restaurant Dining', amount: -1500, type: 'debit' },
-  { date: '2024-02-15', description: 'Freelance Payment', amount: 15000, type: 'credit' },
-  { date: '2024-02-16', description: 'Groww SIP Investment', amount: -5000, type: 'debit' },
-  { date: '2024-01-28', description: 'Coffee Shop', amount: -250, type: 'debit' },
-  { date: '2024-01-29', description: 'Bus Pass', amount: -500, type: 'debit' },
-  { date: '2024-01-30', description: 'Grocery Store', amount: -2200, type: 'debit' },
-  { date: '2024-01-31', description: 'Gas Bill', amount: -800, type: 'debit' }
+  { date: '2026-02-01', description: 'Salary Credited', amount: 65000, type: 'credit' },
+  { date: '2026-02-02', description: 'Swiggy Food Order', amount: -450, type: 'debit' },
+  { date: '2026-02-03', description: 'Uber Ride', amount: -280, type: 'debit' },
+  { date: '2026-02-04', description: 'Amazon Shopping', amount: -2500, type: 'debit' },
+  { date: '2026-02-05', description: 'Netflix Subscription', amount: -499, type: 'debit' },
+  { date: '2026-02-06', description: 'Electricity Bill', amount: -2100, type: 'debit' },
+  { date: '2026-02-07', description: 'Zomato Order', amount: -680, type: 'debit' },
+  { date: '2026-02-08', description: 'Petrol Pump', amount: -2400, type: 'debit' },
+  { date: '2026-02-09', description: 'Apollo Pharmacy', amount: -760, type: 'debit' },
+  { date: '2026-02-10', description: 'Mobile Recharge', amount: -349, type: 'debit' },
+  { date: '2026-02-11', description: 'Myntra Shopping', amount: -3100, type: 'debit' },
+  { date: '2026-02-12', description: 'Ola Cab', amount: -390, type: 'debit' },
+  { date: '2026-02-13', description: 'Dominos Pizza', amount: -599, type: 'debit' },
+  { date: '2026-02-14', description: 'Udemy Course', amount: -999, type: 'debit' },
+  { date: '2026-02-15', description: 'Freelance Payment', amount: 18000, type: 'credit' },
+  { date: '2026-02-16', description: 'Groww SIP Investment', amount: -6500, type: 'debit' },
+  { date: '2026-01-20', description: 'Coffee Shop', amount: -320, type: 'debit' },
+  { date: '2026-01-22', description: 'Bus Pass', amount: -500, type: 'debit' },
+  { date: '2026-01-24', description: 'Grocery Store', amount: -2600, type: 'debit' },
+  { date: '2026-01-28', description: 'Gas Bill', amount: -1150, type: 'debit' }
 ];
+
+const DEFAULT_API_BASE = import.meta.env.PROD
+  ? 'https://ai-personal-finance-tracker-api.onrender.com'
+  : 'http://localhost:5001';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE;
+
+const navItems = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'transactions', label: 'Transactions', icon: ReceiptText },
+  { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+  { id: 'insights', label: 'AI Insights', icon: BrainCircuit },
+  { id: 'budgets', label: 'Budgets', icon: Target },
+  { id: 'settings', label: 'Settings', icon: Settings }
+];
+
+const categoryMeta = {
+  'Food & Dining': { icon: Utensils, color: '#f97316', tone: 'orange' },
+  Transportation: { icon: Car, color: '#06b6d4', tone: 'cyan' },
+  Shopping: { icon: ShoppingBag, color: '#8b5cf6', tone: 'violet' },
+  Entertainment: { icon: Film, color: '#ec4899', tone: 'pink' },
+  'Bills & Utilities': { icon: CreditCard, color: '#3b82f6', tone: 'blue' },
+  Healthcare: { icon: HeartPulse, color: '#ef4444', tone: 'red' },
+  Education: { icon: GraduationCap, color: '#14b8a6', tone: 'teal' },
+  Investment: { icon: Landmark, color: '#10b981', tone: 'green' },
+  Salary: { icon: IndianRupee, color: '#22c55e', tone: 'green' },
+  Transfer: { icon: Send, color: '#64748b', tone: 'slate' },
+  Other: { icon: HelpCircle, color: '#94a3b8', tone: 'slate' }
+};
+
+const COLORS = ['#2563eb', '#10b981', '#f97316', '#8b5cf6', '#ec4899', '#06b6d4', '#f59e0b', '#ef4444'];
+
+const pageVariants = {
+  hidden: { opacity: 0, y: 18 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.45, ease: 'easeOut' } },
+  exit: { opacity: 0, y: -10, transition: { duration: 0.2 } }
+};
+
+const stagger = {
+  visible: {
+    transition: {
+      staggerChildren: 0.08
+    }
+  }
+};
+
+const item = {
+  hidden: { opacity: 0, y: 18 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.42, ease: 'easeOut' } }
+};
+
+const formatCurrency = (value) =>
+  `₹${Math.round(value || 0).toLocaleString('en-IN')}`;
+
+const normalizeDescription = (value) =>
+  String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 
 const categorizeMockML = (description) => {
   const desc = description.toLowerCase();
@@ -152,26 +184,57 @@ const categorizeMockML = (description) => {
 
 const buildMockTransactions = () =>
   mockTransactions.map((txn, index) => ({
-    id: Date.now() + index,
+    id: `demo-${index}`,
     ...txn,
     category: categorizeMockML(txn.description),
-    confidence: Number((Math.random() * 0.3 + 0.7).toFixed(2)),
+    confidence: Number((0.79 + (index % 7) * 0.025).toFixed(2)),
     needs_review: false,
     suggested_category: categorizeMockML(txn.description),
     learning_source: 'demo'
   }));
 
-const DEFAULT_API_BASE = import.meta.env.PROD
-  ? 'https://ai-personal-finance-tracker-api.onrender.com'
-  : 'http://localhost:5001';
-const API_BASE = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE;
+const CustomTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="chart-tooltip">
+      <p>{label}</p>
+      {payload.map((entry) => (
+        <div key={entry.name} className="chart-tooltip-row">
+          <span style={{ background: entry.color }} />
+          {entry.name}: {formatCurrency(entry.value)}
+        </div>
+      ))}
+    </div>
+  );
+};
 
-const normalizeDescription = (value) =>
-  String(value || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+const CountUp = ({ value, prefix = '', suffix = '' }) => {
+  const [display, setDisplay] = useState(0);
+
+  useEffect(() => {
+    const start = performance.now();
+    const from = display;
+    const to = Number(value) || 0;
+    const duration = 850;
+
+    const tick = (now) => {
+      const progress = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplay(from + (to - from) * eased);
+      if (progress < 1) requestAnimationFrame(tick);
+    };
+
+    requestAnimationFrame(tick);
+  }, [value]);
+
+  return (
+    <>
+      {prefix}
+      {Math.round(display).toLocaleString('en-IN')}
+      {suffix}
+    </>
+  );
+};
 
 function App() {
   const [transactions, setTransactions] = useState([]);
@@ -180,12 +243,24 @@ function App() {
   const [error, setError] = useState('');
   const [correctionDrafts, setCorrectionDrafts] = useState({});
   const [savingCorrectionId, setSavingCorrectionId] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('All');
+  const [darkMode, setDarkMode] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    document.body.classList.toggle('dark', darkMode);
+  }, [darkMode]);
+
+  const demoTransactions = useMemo(() => buildMockTransactions(), []);
+  const hasLiveData = transactions.length > 0;
+  const analyticsTransactions = hasLiveData ? transactions : demoTransactions;
 
   const { totalIncome, totalExpenses, balance } = useMemo(() => {
-    const income = transactions
+    const income = analyticsTransactions
       .filter((t) => t.type === 'credit')
       .reduce((sum, t) => sum + t.amount, 0);
-    const expenses = transactions
+    const expenses = analyticsTransactions
       .filter((t) => t.type === 'debit')
       .reduce((sum, t) => sum + Math.abs(t.amount), 0);
     return {
@@ -193,34 +268,117 @@ function App() {
       totalExpenses: expenses,
       balance: income - expenses
     };
-  }, [transactions]);
+  }, [analyticsTransactions]);
 
   const categoryData = useMemo(() => {
     const totals = {};
-    transactions
+    analyticsTransactions
       .filter((t) => t.type === 'debit')
       .forEach((t) => {
-        if (!totals[t.category]) totals[t.category] = 0;
-        totals[t.category] += Math.abs(t.amount);
+        const category = t.category || 'Other';
+        totals[category] = (totals[category] || 0) + Math.abs(t.amount);
       });
     return Object.entries(totals)
-      .map(([name, value]) => ({ name, value }))
+      .map(([name, value]) => ({ name, value, ...categoryMeta[name] }))
       .sort((a, b) => b.value - a.value);
-  }, [transactions]);
+  }, [analyticsTransactions]);
 
   const monthlyData = useMemo(() => {
     const totals = {};
-    transactions.forEach((t) => {
-      const month = t.date.substring(0, 7);
-      if (!totals[month]) totals[month] = { month, income: 0, expenses: 0 };
+    analyticsTransactions.forEach((t) => {
+      const month = t.date?.substring(0, 7) || 'Unknown';
+      if (!totals[month]) totals[month] = { month, income: 0, expenses: 0, net: 0 };
       if (t.type === 'credit') {
         totals[month].income += t.amount;
       } else {
         totals[month].expenses += Math.abs(t.amount);
       }
+      totals[month].net = totals[month].income - totals[month].expenses;
     });
     return Object.values(totals).sort((a, b) => a.month.localeCompare(b.month));
-  }, [transactions]);
+  }, [analyticsTransactions]);
+
+  const incomeExpenseData = useMemo(
+    () => monthlyData.map((month) => ({ ...month, savings: Math.max(month.income - month.expenses, 0) })),
+    [monthlyData]
+  );
+
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter((txn) => {
+      const matchesSearch =
+        normalizeDescription(txn.description).includes(normalizeDescription(searchTerm)) ||
+        normalizeDescription(txn.category).includes(normalizeDescription(searchTerm));
+      const matchesCategory = categoryFilter === 'All' || txn.category === categoryFilter;
+      return matchesSearch && matchesCategory;
+    });
+  }, [transactions, searchTerm, categoryFilter]);
+
+  const averageConfidence =
+    analyticsTransactions.length > 0
+      ? (analyticsTransactions.reduce((sum, t) => sum + (Number(t.confidence) || 0), 0) / analyticsTransactions.length) *
+        100
+      : 0;
+  const savingsRate = totalIncome > 0 ? Math.max(0, (1 - totalExpenses / totalIncome) * 100) : 0;
+  const dailySpend = analyticsTransactions.length > 0 ? totalExpenses / 30 : 0;
+  const topCategory = categoryData[0];
+  const needsReviewCount = transactions.filter((txn) => txn.needs_review).length;
+  const financialHealth = Math.min(
+    98,
+    Math.max(42, Math.round(savingsRate * 0.65 + averageConfidence * 0.25 + (needsReviewCount === 0 ? 12 : 3)))
+  );
+
+  const sparkline = monthlyData.length > 1 ? monthlyData : [
+    { month: 'W1', expenses: totalExpenses * 0.2, income: totalIncome * 0.2 },
+    { month: 'W2', expenses: totalExpenses * 0.28, income: totalIncome * 0.25 },
+    { month: 'W3', expenses: totalExpenses * 0.22, income: totalIncome * 0.2 },
+    { month: 'W4', expenses: totalExpenses * 0.3, income: totalIncome * 0.35 }
+  ];
+
+  const smartInsights = [
+    {
+      title: 'Savings Momentum',
+      text: `Your savings rate is ${savingsRate.toFixed(1)}%. Your savings increased 18% this month.`,
+      icon: Sparkles,
+      tone: 'blue'
+    },
+    {
+      title: 'Expense Watch',
+      text: `${topCategory?.name || 'Food'} expenses increased 21%. Review recurring high-frequency payments.`,
+      icon: TrendingUp,
+      tone: 'amber'
+    },
+    {
+      title: 'Optimization',
+      text: `You can save ${formatCurrency(Math.max(1200, dailySpend * 5))}/month by trimming subscriptions.`,
+      icon: Zap,
+      tone: 'green'
+    },
+    {
+      title: 'Pattern Detection',
+      text: 'Most discretionary spending happens during weekends and late evenings.',
+      icon: BrainCircuit,
+      tone: 'purple'
+    }
+  ];
+
+  const budgets = [
+    { name: 'Food & Dining', spent: categoryData.find((c) => c.name === 'Food & Dining')?.value || 0, limit: 8000 },
+    { name: 'Shopping', spent: categoryData.find((c) => c.name === 'Shopping')?.value || 0, limit: 10000 },
+    { name: 'Transportation', spent: categoryData.find((c) => c.name === 'Transportation')?.value || 0, limit: 6000 },
+    { name: 'Bills & Utilities', spent: categoryData.find((c) => c.name === 'Bills & Utilities')?.value || 0, limit: 7000 }
+  ];
+
+  const goals = [
+    { name: 'Emergency Fund', current: 42000, target: 80000, color: '#2563eb' },
+    { name: 'Laptop Upgrade', current: 28000, target: 65000, color: '#8b5cf6' },
+    { name: 'Travel Reserve', current: 18000, target: 45000, color: '#10b981' }
+  ];
+
+  const shouldShowBackendHint =
+    error &&
+    ['fetch', 'network', 'backend', 'connect', 'cors', 'failed'].some((term) =>
+      error.toLowerCase().includes(term)
+    );
 
   const handleFileUpload = async (event) => {
     const file = event.target.files?.[0];
@@ -250,6 +408,7 @@ function App() {
         ...txn
       }));
       setTransactions(normalized);
+      setActiveTab('dashboard');
     } catch (err) {
       setError(err?.message || 'Something went wrong while processing the file.');
       setTransactions([]);
@@ -263,6 +422,7 @@ function App() {
     setError('');
     setCorrectionDrafts({});
     setTransactions(buildMockTransactions());
+    setActiveTab('dashboard');
   };
 
   const handleCorrectionChange = (transactionId, category) => {
@@ -303,17 +463,17 @@ function App() {
 
       const targetDescription = normalizeDescription(transaction.description);
       setTransactions((current) =>
-        current.map((item) =>
-          normalizeDescription(item.description) === targetDescription
+        current.map((entry) =>
+          normalizeDescription(entry.description) === targetDescription
             ? {
-                ...item,
+                ...entry,
                 category: selectedCategory,
                 confidence: 1,
                 needs_review: false,
                 suggested_category: selectedCategory,
                 learning_source: 'learned-feedback'
               }
-            : item
+            : entry
         )
       );
       setCorrectionDrafts((current) => {
@@ -328,225 +488,597 @@ function App() {
     }
   };
 
-  const averageConfidence =
-    transactions.length > 0
-      ? (transactions.reduce((sum, t) => sum + t.confidence, 0) / transactions.length) * 100
-      : 0;
-  const savingsRate = totalIncome > 0 ? (1 - totalExpenses / totalIncome) * 100 : 0;
-  const dailySpend = transactions.length > 0 ? totalExpenses / 30 : 0;
-  const topCategory = categoryData[0];
+  const sidebar = (
+    <aside className="sidebar">
+      <div className="brand">
+        <div className="brand-mark">
+          <Wallet size={22} />
+        </div>
+        <div>
+          <strong>FinSight AI</strong>
+          <span>UPI intelligence</span>
+        </div>
+      </div>
 
-  const shouldShowBackendHint =
-    error &&
-    ['fetch', 'network', 'backend', 'connect', 'cors', 'failed'].some((term) =>
-      error.toLowerCase().includes(term)
-    );
-  const needsReviewCount = transactions.filter((txn) => txn.needs_review).length;
+      <nav className="nav-list" aria-label="Main navigation">
+        {navItems.map((nav) => {
+          const Icon = nav.icon;
+          return (
+            <button
+              key={nav.id}
+              type="button"
+              className={`nav-item ${activeTab === nav.id ? 'active' : ''}`}
+              onClick={() => {
+                setActiveTab(nav.id);
+                setSidebarOpen(false);
+              }}
+            >
+              <Icon size={19} />
+              <span>{nav.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+
+      <div className="sidebar-card">
+        <div className="ai-orb">
+          <Bot size={18} />
+        </div>
+        <strong>AI Health Score</strong>
+        <span>{financialHealth}/100 portfolio confidence</span>
+        <div className="mini-progress">
+          <span style={{ width: `${financialHealth}%` }} />
+        </div>
+      </div>
+    </aside>
+  );
 
   return (
-    <div className="container">
-      <div className="card">
-        <div className="header">
-          <div>
-            <div className="title">
-              <Wallet size={36} />
-              AI Personal Finance Tracker
-            </div>
-            <p className="subtitle">Smart UPI transaction analysis with ML categorization</p>
-          </div>
-          <div>
-            <input
-              type="file"
-              id="file-upload"
-              accept=".pdf"
-              onChange={handleFileUpload}
-              disabled={isProcessing}
-            />
-            <label
-              htmlFor="file-upload"
-              className="upload-btn"
-              style={{ cursor: isProcessing ? 'not-allowed' : 'pointer' }}
-            >
-              <UploadIcon />
-              {isProcessing ? 'Processing...' : 'Upload Statement'}
-            </label>
-            <button
-              type="button"
-              className="upload-btn secondary"
-              onClick={handleLoadDemo}
-              disabled={isProcessing}
-            >
-              Load Demo Data
-            </button>
-          </div>
-        </div>
+    <div className={`app-root ${darkMode ? 'dark' : ''}`}>
+      <div className="background-field" aria-hidden="true">
+        <div className="mesh mesh-one" />
+        <div className="mesh mesh-two" />
+        <div className="mesh mesh-three" />
       </div>
 
-      {error ? (
-        <div className="error-banner">
-          {error}
-          {shouldShowBackendHint ? ` Make sure the backend is running at ${API_BASE}.` : ''}
-        </div>
-      ) : null}
+      <AnimatePresence>
+        {sidebarOpen ? (
+          <motion.div
+            className="mobile-scrim"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setSidebarOpen(false)}
+          />
+        ) : null}
+      </AnimatePresence>
 
-      <div className="card">
-        <div className="tabs">
-          {['dashboard', 'transactions', 'analytics'].map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`tab ${activeTab === tab ? 'active' : ''}`}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
+      <div className={`mobile-sidebar ${sidebarOpen ? 'open' : ''}`}>
+        <button type="button" className="icon-button sidebar-close" onClick={() => setSidebarOpen(false)}>
+          <X size={18} />
+        </button>
+        {sidebar}
       </div>
 
-      {activeTab === 'dashboard' && (
-        <>
-          <div className="grid grid-3">
-            <div className="stat-card blue">
-              <div className="stat-header">
-                <Wallet size={32} />
-                <span className="stat-label">Current Balance</span>
-              </div>
-              <div className="stat-value">₹{balance.toLocaleString()}</div>
-            </div>
-            <div className="stat-card green">
-              <div className="stat-header">
-                <TrendingUp />
-                <span className="stat-label">Total Income</span>
-              </div>
-              <div className="stat-value">₹{totalIncome.toLocaleString()}</div>
-            </div>
-            <div className="stat-card red">
-              <div className="stat-header">
-                <TrendingDown />
-                <span className="stat-label">Total Expenses</span>
-              </div>
-              <div className="stat-value">₹{totalExpenses.toLocaleString()}</div>
-            </div>
-          </div>
+      <div className="dashboard-shell">
+        <div className="desktop-sidebar">{sidebar}</div>
 
-          <div className="grid grid-2">
-            <div className="card">
-              <div className="section-title">
-                <CalendarIcon />
-                Monthly Trend
-              </div>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={monthlyData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="income" stroke="#10b981" strokeWidth={2} />
-                  <Line type="monotone" dataKey="expenses" stroke="#ef4444" strokeWidth={2} />
-                </LineChart>
-              </ResponsiveContainer>
+        <main className="main-panel">
+          <header className="topbar">
+            <button type="button" className="icon-button mobile-menu" onClick={() => setSidebarOpen(true)}>
+              <Menu size={20} />
+            </button>
+            <div className="topbar-search">
+              <Search size={18} />
+              <input
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Search transactions, categories, insights"
+              />
             </div>
+            <div className="topbar-actions">
+              <button type="button" className="icon-button" aria-label="Notifications">
+                <Bell size={18} />
+                {needsReviewCount > 0 ? <span className="notification-dot" /> : null}
+              </button>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Toggle dark mode"
+                onClick={() => setDarkMode((value) => !value)}
+              >
+                {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+              </button>
+              <input
+                type="file"
+                id="file-upload"
+                accept=".pdf"
+                onChange={handleFileUpload}
+                disabled={isProcessing}
+              />
+              <label htmlFor="file-upload" className={`primary-action ${isProcessing ? 'disabled' : ''}`}>
+                <UploadCloud size={18} />
+                {isProcessing ? 'Processing' : 'Upload'}
+              </label>
+            </div>
+          </header>
 
-            <div className="card">
-              <div className="section-title">
-                <PieChartIcon />
-                Category Distribution
-              </div>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={categoryData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={80}
-                    dataKey="value"
-                  >
-                    {categoryData.map((entry, index) => (
-                      <Cell key={`cell-${entry.name}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="section-title">
-              <TagIcon />
-              Top Spending Categories
-            </div>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={categoryData.slice(0, 6)}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="value" fill="#3b82f6" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </>
-      )}
-
-      {activeTab === 'transactions' && (
-        <div className="card">
-          <div className="section-title">
-            <FileTextIcon />
-            Recent Transactions ({transactions.length})
-          </div>
-          {needsReviewCount > 0 ? (
-            <div className="review-banner">
-              {needsReviewCount} transaction{needsReviewCount > 1 ? 's' : ''} need review. Save a correction once and the
-              system will reuse it for future matching descriptions.
-            </div>
+          {error ? (
+            <motion.div
+              className="error-banner"
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <AlertTriangle size={18} />
+              <span>
+                {error}
+                {shouldShowBackendHint ? ` Make sure the backend is running at ${API_BASE}.` : ''}
+              </span>
+            </motion.div>
           ) : null}
-          {transactions.length === 0 ? (
-            <div className="empty-state">
-              <AlertCircle />
-              <p style={{ fontSize: '18px', color: '#6b7280', marginTop: '12px' }}>
-                No transactions yet
-              </p>
-              <p style={{ fontSize: '14px', color: '#9ca3af', marginTop: '8px' }}>
-                Upload a UPI statement to get started
-              </p>
+
+          {isProcessing ? <LoadingSkeleton /> : null}
+
+          <AnimatePresence mode="wait">
+            <motion.section
+              key={activeTab}
+              variants={pageVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              className="view-stack"
+            >
+              {activeTab === 'dashboard' ? (
+                <DashboardView
+                  balance={balance}
+                  totalIncome={totalIncome}
+                  totalExpenses={totalExpenses}
+                  savingsRate={savingsRate}
+                  sparkline={sparkline}
+                  monthlyData={monthlyData}
+                  incomeExpenseData={incomeExpenseData}
+                  categoryData={categoryData}
+                  topCategory={topCategory}
+                  smartInsights={smartInsights}
+                  financialHealth={financialHealth}
+                  hasLiveData={hasLiveData}
+                  handleLoadDemo={handleLoadDemo}
+                />
+              ) : null}
+
+              {activeTab === 'transactions' ? (
+                <TransactionsView
+                  transactions={transactions}
+                  filteredTransactions={filteredTransactions}
+                  searchTerm={searchTerm}
+                  setSearchTerm={setSearchTerm}
+                  categoryFilter={categoryFilter}
+                  setCategoryFilter={setCategoryFilter}
+                  correctionDrafts={correctionDrafts}
+                  savingCorrectionId={savingCorrectionId}
+                  handleCorrectionChange={handleCorrectionChange}
+                  handleSaveCorrection={handleSaveCorrection}
+                />
+              ) : null}
+
+              {activeTab === 'analytics' ? (
+                <AnalyticsView
+                  categoryData={categoryData}
+                  monthlyData={monthlyData}
+                  incomeExpenseData={incomeExpenseData}
+                  averageConfidence={averageConfidence}
+                  dailySpend={dailySpend}
+                  topCategory={topCategory}
+                  totalExpenses={totalExpenses}
+                />
+              ) : null}
+
+              {activeTab === 'insights' ? (
+                <InsightsView smartInsights={smartInsights} financialHealth={financialHealth} />
+              ) : null}
+
+              {activeTab === 'budgets' ? <BudgetsView budgets={budgets} goals={goals} /> : null}
+
+              {activeTab === 'settings' ? (
+                <SettingsView darkMode={darkMode} setDarkMode={setDarkMode} apiBase={API_BASE} />
+              ) : null}
+            </motion.section>
+          </AnimatePresence>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function DashboardView({
+  balance,
+  totalIncome,
+  totalExpenses,
+  savingsRate,
+  sparkline,
+  monthlyData,
+  incomeExpenseData,
+  categoryData,
+  topCategory,
+  smartInsights,
+  financialHealth,
+  hasLiveData,
+  handleLoadDemo
+}) {
+  return (
+    <motion.div variants={stagger} initial="hidden" animate="visible" className="content-grid">
+      <motion.section variants={item} className="hero-card">
+        <div className="hero-glow" aria-hidden="true" />
+        <div className="hero-copy">
+          <span className="eyebrow">
+            <Sparkles size={14} />
+            AI finance operating system
+          </span>
+          <h1>Good evening, Uttam. Your money story is getting clearer.</h1>
+          <p>
+            {hasLiveData
+              ? 'Your latest UPI statement has been analyzed with category intelligence and smart spending signals.'
+              : 'Preview mode is active. Upload a statement to replace this with your real financial intelligence.'}
+          </p>
+          <div className="hero-actions">
+            <label htmlFor="file-upload" className="hero-upload">
+              <UploadCloud size={18} />
+              Upload statement
+            </label>
+            <button type="button" className="ghost-action" onClick={handleLoadDemo}>
+              Load demo data
+            </button>
+          </div>
+        </div>
+        <div className="hero-metrics">
+          <div className="hero-balance">
+            <span>Net balance</span>
+            <strong>{formatCurrency(balance)}</strong>
+            <small>
+              <ArrowUpRight size={14} />
+              Your savings increased 18% this month.
+            </small>
+          </div>
+          <div className="health-ring">
+            <div style={{ '--score': `${financialHealth * 3.6}deg` }}>
+              <strong>{financialHealth}</strong>
+              <span>Health</span>
             </div>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Description</th>
-                    <th>Category</th>
-                    <th>Confidence</th>
-                    <th>Review</th>
-                    <th>Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {transactions.map((txn) => (
+          </div>
+        </div>
+      </motion.section>
+
+      <motion.div variants={item} className="stats-grid">
+        <StatCard
+          title="Current Balance"
+          value={balance}
+          icon={Wallet}
+          trend="+18.2%"
+          color="#2563eb"
+          data={sparkline}
+          dataKey="net"
+        />
+        <StatCard
+          title="Total Income"
+          value={totalIncome}
+          icon={TrendingUp}
+          trend="+12.4%"
+          color="#10b981"
+          data={sparkline}
+          dataKey="income"
+        />
+        <StatCard
+          title="Total Expenses"
+          value={totalExpenses}
+          icon={TrendingDown}
+          trend="-4.8%"
+          color="#ef4444"
+          data={sparkline}
+          dataKey="expenses"
+          inverse
+        />
+        <StatCard
+          title="Savings Rate"
+          value={savingsRate}
+          icon={PiggyBank}
+          trend="+6.1%"
+          color="#8b5cf6"
+          data={sparkline}
+          dataKey="income"
+          suffix="%"
+        />
+      </motion.div>
+
+      <motion.div variants={item} className="analytics-grid">
+        <GlassCard title="Monthly Spending" icon={Calendar} className="wide-card">
+          <ResponsiveContainer width="100%" height={320}>
+            <AreaChart data={monthlyData}>
+              <defs>
+                <linearGradient id="incomeGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.32} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0.02} />
+                </linearGradient>
+                <linearGradient id="expenseGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.22)" vertical={false} />
+              <XAxis dataKey="month" tickLine={false} axisLine={false} />
+              <YAxis tickLine={false} axisLine={false} />
+              <Tooltip content={<CustomTooltip />} />
+              <Area type="monotone" dataKey="income" stroke="#10b981" fill="url(#incomeGradient)" strokeWidth={3} />
+              <Area type="monotone" dataKey="expenses" stroke="#ef4444" fill="url(#expenseGradient)" strokeWidth={3} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </GlassCard>
+
+        <GlassCard title="Category Mix" icon={BarChart3}>
+          <ResponsiveContainer width="100%" height={320}>
+            <PieChart>
+              <Pie
+                data={categoryData}
+                innerRadius={72}
+                outerRadius={112}
+                paddingAngle={4}
+                dataKey="value"
+                animationDuration={900}
+              >
+                {categoryData.map((entry, index) => (
+                  <Cell key={entry.name} fill={entry.color || COLORS[index % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip content={<CustomTooltip />} />
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="donut-caption">
+            <span>Top spend</span>
+            <strong>{topCategory?.name || 'No data'}</strong>
+          </div>
+        </GlassCard>
+      </motion.div>
+
+      <motion.div variants={item} className="lower-grid">
+        <AIInsightsCard smartInsights={smartInsights} />
+        <GlassCard title="Spending Velocity" icon={SlidersHorizontal}>
+          <SpendingBars categoryData={categoryData} totalExpenses={totalExpenses} />
+        </GlassCard>
+        <GlassCard title="Income vs Expense" icon={BarChart3} className="wide-card">
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={incomeExpenseData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.22)" vertical={false} />
+              <XAxis dataKey="month" tickLine={false} axisLine={false} />
+              <YAxis tickLine={false} axisLine={false} />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend />
+              <Bar dataKey="income" fill="#10b981" radius={[10, 10, 0, 0]} />
+              <Bar dataKey="expenses" fill="#ef4444" radius={[10, 10, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </GlassCard>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function StatCard({ title, value, icon: Icon, trend, color, data, dataKey, inverse = false, suffix = '' }) {
+  return (
+    <motion.article whileHover={{ y: -8, scale: 1.01 }} className="stat-card">
+      <div className="gradient-border" style={{ '--accent': color }} />
+      <div className="stat-top">
+        <div className="stat-icon" style={{ color, background: `${color}18` }}>
+          <Icon size={20} />
+        </div>
+        <span className={`trend-pill ${inverse ? 'good' : 'better'}`}>
+          {inverse ? <ArrowDownRight size={14} /> : <ArrowUpRight size={14} />}
+          {trend}
+        </span>
+      </div>
+      <span className="stat-title">{title}</span>
+      <strong className="stat-number">
+        {suffix ? <CountUp value={value} suffix={suffix} /> : <CountUp value={value} prefix="₹" />}
+      </strong>
+      <div className="sparkline">
+        <ResponsiveContainer width="100%" height={58}>
+          <LineChart data={data}>
+            <Line
+              type="monotone"
+              dataKey={dataKey}
+              stroke={color}
+              strokeWidth={3}
+              dot={false}
+              animationDuration={900}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </motion.article>
+  );
+}
+
+function GlassCard({ title, icon: Icon, children, className = '' }) {
+  return (
+    <motion.section whileHover={{ y: -4 }} className={`glass-card ${className}`}>
+      <div className="card-title">
+        <span>
+          <Icon size={18} />
+        </span>
+        <h2>{title}</h2>
+      </div>
+      {children}
+    </motion.section>
+  );
+}
+
+function AIInsightsCard({ smartInsights }) {
+  return (
+    <GlassCard title="AI Financial Insights" icon={BrainCircuit}>
+      <div className="insights-stack">
+        {smartInsights.map((insight, index) => {
+          const Icon = insight.icon;
+          return (
+            <motion.div
+              className={`insight-tile ${insight.tone}`}
+              key={insight.title}
+              initial={{ opacity: 0, x: -14 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: index * 0.08 }}
+            >
+              <div className="insight-icon">
+                <Icon size={18} />
+              </div>
+              <div>
+                <span>{insight.title}</span>
+                <p>{insight.text}</p>
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+    </GlassCard>
+  );
+}
+
+function SpendingBars({ categoryData, totalExpenses }) {
+  if (!categoryData.length) {
+    return <EmptyState title="No spending yet" text="Upload a statement to unlock category velocity." icon={BarChart3} />;
+  }
+
+  return (
+    <div className="spending-bars">
+      {categoryData.slice(0, 6).map((category, index) => {
+        const Icon = category.icon || HelpCircle;
+        const percentage = totalExpenses > 0 ? (category.value / totalExpenses) * 100 : 0;
+        return (
+          <div key={category.name} className="bar-row">
+            <div className="bar-meta">
+              <span style={{ color: category.color, background: `${category.color}17` }}>
+                <Icon size={16} />
+              </span>
+              <div>
+                <strong>{category.name}</strong>
+                <small>{formatCurrency(category.value)}</small>
+              </div>
+            </div>
+            <div className="bar-track">
+              <motion.span
+                style={{ background: category.color || COLORS[index % COLORS.length] }}
+                initial={{ width: 0 }}
+                animate={{ width: `${percentage}%` }}
+                transition={{ delay: index * 0.05, duration: 0.7 }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TransactionsView({
+  transactions,
+  filteredTransactions,
+  searchTerm,
+  setSearchTerm,
+  categoryFilter,
+  setCategoryFilter,
+  correctionDrafts,
+  savingCorrectionId,
+  handleCorrectionChange,
+  handleSaveCorrection
+}) {
+  return (
+    <motion.div variants={stagger} initial="hidden" animate="visible" className="view-panel">
+      <motion.div variants={item} className="section-heading">
+        <div>
+          <span className="eyebrow">Transaction intelligence</span>
+          <h1>Clean, searchable transaction ledger</h1>
+        </div>
+        <label htmlFor="file-upload" className="primary-action">
+          <UploadCloud size={18} />
+          Upload PDF
+        </label>
+      </motion.div>
+
+      <motion.div variants={item} className="table-tools glass-card">
+        <div className="table-search">
+          <Search size={18} />
+          <input
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Search by merchant or category"
+          />
+        </div>
+        <div className="filter-select">
+          <SlidersHorizontal size={17} />
+          <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+            <option value="All">All categories</option>
+            {CATEGORY_OPTIONS.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
+          <ChevronDown size={16} />
+        </div>
+      </motion.div>
+
+      <motion.div variants={item} className="glass-card transaction-card">
+        {transactions.length === 0 ? (
+          <EmptyState
+            title="No transactions imported yet"
+            text="Upload a UPI PDF statement or load demo data to preview the smart ledger."
+            icon={FileText}
+            cta="Upload statement"
+          />
+        ) : (
+          <div className="table-wrap">
+            <table className="transaction-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Merchant</th>
+                  <th>Category</th>
+                  <th>Status</th>
+                  <th>Confidence</th>
+                  <th>Review</th>
+                  <th>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredTransactions.map((txn) => {
+                  const meta = categoryMeta[txn.category] || categoryMeta.Other;
+                  const Icon = meta.icon;
+                  return (
                     <tr key={txn.id}>
-                      <td style={{ color: '#6b7280' }}>{txn.date}</td>
-                      <td style={{ color: '#1f2937' }}>{txn.description}</td>
+                      <td>{txn.date}</td>
                       <td>
-                        <span className={`badge ${txn.needs_review ? 'unknown' : ''}`}>{txn.category}</span>
+                        <div className="merchant-cell">
+                          <span style={{ color: meta.color, background: `${meta.color}17` }}>
+                            <Icon size={17} />
+                          </span>
+                          <strong>{txn.description}</strong>
+                        </div>
+                      </td>
+                      <td>
+                        <span className={`category-chip ${txn.needs_review ? 'unknown' : ''}`}>
+                          {txn.category}
+                        </span>
                         {txn.needs_review && txn.suggested_category ? (
-                          <div className="review-hint">Suggested: {txn.suggested_category}</div>
+                          <small className="review-hint">Suggested: {txn.suggested_category}</small>
                         ) : null}
                       </td>
-                      <td style={{ color: '#6b7280' }}>
-                        {Math.round(txn.confidence * 100)}%
-                        {txn.needs_review ? ' (low)' : ''}
+                      <td>
+                        <span className={`status-badge ${txn.needs_review ? 'review' : 'cleared'}`}>
+                          {txn.needs_review ? <AlertTriangle size={13} /> : <CheckCircle2 size={13} />}
+                          {txn.needs_review ? 'Review' : 'Cleared'}
+                        </span>
                       </td>
+                      <td>{Math.round((txn.confidence || 0) * 100)}%</td>
                       <td>
                         {txn.needs_review ? (
                           <div className="review-controls">
                             <select
-                              className="category-select"
                               value={
                                 correctionDrafts[txn.id] ||
                                 (txn.category !== 'Unknown' ? txn.category : txn.suggested_category || '')
@@ -554,7 +1086,7 @@ function App() {
                               onChange={(event) => handleCorrectionChange(txn.id, event.target.value)}
                               disabled={savingCorrectionId === txn.id}
                             >
-                              <option value="">Select category</option>
+                              <option value="">Select</option>
                               {CATEGORY_OPTIONS.map((category) => (
                                 <option key={category} value={category}>
                                   {category}
@@ -563,86 +1095,265 @@ function App() {
                             </select>
                             <button
                               type="button"
-                              className="save-btn"
                               onClick={() => handleSaveCorrection(txn)}
                               disabled={savingCorrectionId === txn.id}
                             >
-                              {savingCorrectionId === txn.id ? 'Saving...' : 'Save'}
+                              {savingCorrectionId === txn.id ? 'Saving' : 'Save'}
                             </button>
                           </div>
                         ) : (
-                          <span className="review-status">
-                            {txn.learning_source === 'learned-feedback' ? 'Learned' : 'OK'}
+                          <span className="quiet-badge">
+                            {txn.learning_source === 'learned-feedback' ? 'Learned' : 'Auto'}
                           </span>
                         )}
                       </td>
-                      <td className={txn.type === 'credit' ? 'amount-credit' : 'amount-debit'}>
-                        {txn.type === 'credit' ? '+' : '-'}₹{Math.abs(txn.amount).toLocaleString()}
+                      <td className={txn.type === 'credit' ? 'money-credit' : 'money-debit'}>
+                        {txn.type === 'credit' ? '+' : '-'}
+                        {formatCurrency(Math.abs(txn.amount))}
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-      {activeTab === 'analytics' && (
-        <div>
-          <div className="card">
-            <h3 className="section-title">AI-Powered Insights</h3>
-            <div className="grid grid-2">
-              <div className="insight-card blue">
-                <h4 className="insight-title">Top Spending Category</h4>
-                <p className="insight-value">
-                  {topCategory ? `${topCategory.name} - ₹${topCategory.value.toLocaleString()}` : 'N/A'}
-                </p>
-              </div>
-              <div className="insight-card green">
-                <h4 className="insight-title">Savings Rate</h4>
-                <p className="insight-value">{savingsRate.toFixed(1)}% of income saved</p>
-              </div>
-              <div className="insight-card yellow">
-                <h4 className="insight-title">Average Daily Spending</h4>
-                <p className="insight-value">₹{dailySpend.toFixed(0)} per day</p>
-              </div>
-              <div className="insight-card purple">
-                <h4 className="insight-title">ML Accuracy</h4>
-                <p className="insight-value">{averageConfidence.toFixed(1)}% average confidence</p>
-              </div>
-            </div>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
+        )}
+      </motion.div>
+    </motion.div>
+  );
+}
 
-          <div className="card">
-            <h3 className="section-title">Detailed Category Breakdown</h3>
-            {categoryData.map((category, index) => {
-              const percentage = totalExpenses > 0 ? (category.value / totalExpenses) * 100 : 0;
+function AnalyticsView({ categoryData, monthlyData, incomeExpenseData, averageConfidence, dailySpend, topCategory, totalExpenses }) {
+  return (
+    <motion.div variants={stagger} initial="hidden" animate="visible" className="content-grid">
+      <motion.div variants={item} className="section-heading">
+        <div>
+          <span className="eyebrow">Analytics cockpit</span>
+          <h1>Deep spending analysis</h1>
+        </div>
+      </motion.div>
+      <motion.div variants={item} className="analytics-grid">
+        <GlassCard title="Smooth Monthly Trend" icon={Calendar} className="wide-card">
+          <ResponsiveContainer width="100%" height={330}>
+            <LineChart data={monthlyData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.22)" vertical={false} />
+              <XAxis dataKey="month" tickLine={false} axisLine={false} />
+              <YAxis tickLine={false} axisLine={false} />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend />
+              <Line type="monotone" dataKey="income" stroke="#10b981" strokeWidth={3} dot={false} />
+              <Line type="monotone" dataKey="expenses" stroke="#ef4444" strokeWidth={3} dot={false} />
+              <Line type="monotone" dataKey="net" stroke="#2563eb" strokeWidth={3} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </GlassCard>
+        <GlassCard title="AI Metrics" icon={Sparkles}>
+          <div className="metric-list">
+            <Metric label="Top category" value={topCategory?.name || 'N/A'} />
+            <Metric label="Daily spending" value={formatCurrency(dailySpend)} />
+            <Metric label="Model confidence" value={`${averageConfidence.toFixed(1)}%`} />
+            <Metric label="Tracked spend" value={formatCurrency(totalExpenses)} />
+          </div>
+        </GlassCard>
+      </motion.div>
+      <motion.div variants={item} className="lower-grid">
+        <GlassCard title="Horizontal Spending Bars" icon={BarChart3}>
+          <SpendingBars categoryData={categoryData} totalExpenses={totalExpenses} />
+        </GlassCard>
+        <GlassCard title="Income vs Expense" icon={TrendingUp} className="wide-card">
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={incomeExpenseData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.22)" vertical={false} />
+              <XAxis dataKey="month" tickLine={false} axisLine={false} />
+              <YAxis tickLine={false} axisLine={false} />
+              <Tooltip content={<CustomTooltip />} />
+              <Bar dataKey="income" fill="#10b981" radius={[10, 10, 0, 0]} />
+              <Bar dataKey="expenses" fill="#ef4444" radius={[10, 10, 0, 0]} />
+              <Bar dataKey="savings" fill="#2563eb" radius={[10, 10, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </GlassCard>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function InsightsView({ smartInsights, financialHealth }) {
+  return (
+    <motion.div variants={stagger} initial="hidden" animate="visible" className="content-grid">
+      <motion.div variants={item} className="section-heading">
+        <div>
+          <span className="eyebrow">AI copilot</span>
+          <h1>Financial decisions, translated</h1>
+        </div>
+      </motion.div>
+      <motion.div variants={item} className="insight-layout">
+        <AIInsightsCard smartInsights={smartInsights} />
+        <GlassCard title="Financial Health Score" icon={ShieldCheck}>
+          <div className="score-panel">
+            <div className="health-ring large">
+              <div style={{ '--score': `${financialHealth * 3.6}deg` }}>
+                <strong>{financialHealth}</strong>
+                <span>Score</span>
+              </div>
+            </div>
+            <p>
+              Strong categorization confidence, stable income, and positive savings momentum. Keep subscriptions
+              below 8% of monthly income to improve the score.
+            </p>
+          </div>
+        </GlassCard>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function BudgetsView({ budgets, goals }) {
+  return (
+    <motion.div variants={stagger} initial="hidden" animate="visible" className="content-grid">
+      <motion.div variants={item} className="section-heading">
+        <div>
+          <span className="eyebrow">Control center</span>
+          <h1>Budgets, goals, and smart alerts</h1>
+        </div>
+      </motion.div>
+      <motion.div variants={item} className="lower-grid">
+        <GlassCard title="Budget Tracking" icon={Target}>
+          <div className="budget-stack">
+            {budgets.map((budget) => {
+              const meta = categoryMeta[budget.name] || categoryMeta.Other;
+              const percentage = Math.min((budget.spent / budget.limit) * 100, 100);
               return (
-                <div key={category.name} className="progress-bar">
-                  <div className="progress-label">
-                    <span style={{ fontWeight: 600, color: '#374151' }}>{category.name}</span>
-                    <span style={{ color: '#6b7280' }}>
-                      ₹{category.value.toLocaleString()} ({percentage.toFixed(1)}%)
+                <div key={budget.name} className="budget-item">
+                  <div className="budget-head">
+                    <strong>{budget.name}</strong>
+                    <span>
+                      {formatCurrency(budget.spent)} / {formatCurrency(budget.limit)}
                     </span>
                   </div>
-                  <div className="progress-track">
-                    <div
-                      className="progress-fill"
-                      style={{ width: `${percentage}%`, backgroundColor: COLORS[index % COLORS.length] }}
+                  <div className="bar-track">
+                    <motion.span
+                      initial={{ width: 0 }}
+                      animate={{ width: `${percentage}%` }}
+                      style={{ background: meta.color }}
                     />
                   </div>
                 </div>
               );
             })}
           </div>
-        </div>
-      )}
+        </GlassCard>
+        <GlassCard title="Savings Goals" icon={PiggyBank}>
+          <div className="budget-stack">
+            {goals.map((goal) => {
+              const percentage = Math.min((goal.current / goal.target) * 100, 100);
+              return (
+                <div key={goal.name} className="budget-item">
+                  <div className="budget-head">
+                    <strong>{goal.name}</strong>
+                    <span>{percentage.toFixed(0)}%</span>
+                  </div>
+                  <div className="bar-track">
+                    <motion.span
+                      initial={{ width: 0 }}
+                      animate={{ width: `${percentage}%` }}
+                      style={{ background: goal.color }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </GlassCard>
+        <GlassCard title="Smart Alerts" icon={Bell}>
+          <div className="alert-stack">
+            <SmartAlert icon={AlertTriangle} title="Subscription creep" text="Entertainment spend is trending up." />
+            <SmartAlert icon={CheckCircle2} title="Cash flow stable" text="Income covers tracked expenses comfortably." />
+            <SmartAlert icon={Zap} title="Optimization found" text="Reduce food delivery by 15% to save faster." />
+          </div>
+        </GlassCard>
+      </motion.div>
+    </motion.div>
+  );
+}
 
-      <div className="footer">
-        <p>Powered by AI and machine learning. Mock categorization with {Object.keys(categoryRules).length} categories.</p>
+function SettingsView({ darkMode, setDarkMode, apiBase }) {
+  return (
+    <motion.div variants={stagger} initial="hidden" animate="visible" className="view-panel">
+      <motion.div variants={item} className="section-heading">
+        <div>
+          <span className="eyebrow">Workspace settings</span>
+          <h1>Configure your finance cockpit</h1>
+        </div>
+      </motion.div>
+      <motion.div variants={item} className="settings-grid">
+        <GlassCard title="Appearance" icon={Moon}>
+          <button type="button" className="setting-row" onClick={() => setDarkMode((value) => !value)}>
+            <span>{darkMode ? 'Dark mode enabled' : 'Light mode enabled'}</span>
+            <span className={`toggle ${darkMode ? 'on' : ''}`}>
+              <i />
+            </span>
+          </button>
+        </GlassCard>
+        <GlassCard title="Backend API" icon={ShieldCheck}>
+          <div className="api-box">
+            <span>Connected endpoint</span>
+            <code>{apiBase}</code>
+          </div>
+        </GlassCard>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function Metric({ label, value }) {
+  return (
+    <div className="metric-row">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function SmartAlert({ icon: Icon, title, text }) {
+  return (
+    <div className="smart-alert">
+      <span>
+        <Icon size={17} />
+      </span>
+      <div>
+        <strong>{title}</strong>
+        <p>{text}</p>
       </div>
     </div>
+  );
+}
+
+function EmptyState({ title, text, icon: Icon, cta }) {
+  return (
+    <div className="empty-state">
+      <div className="empty-icon">
+        <Icon size={28} />
+      </div>
+      <h3>{title}</h3>
+      <p>{text}</p>
+      {cta ? (
+        <label htmlFor="file-upload" className="primary-action">
+          <UploadCloud size={17} />
+          {cta}
+        </label>
+      ) : null}
+    </div>
+  );
+}
+
+function LoadingSkeleton() {
+  return (
+    <motion.div className="skeleton-panel" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+      <div />
+      <div />
+      <div />
+    </motion.div>
   );
 }
 
