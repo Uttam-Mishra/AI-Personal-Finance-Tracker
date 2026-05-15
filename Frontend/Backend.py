@@ -916,15 +916,15 @@ def categorize_transaction(description):
         }
 
     try:
-        predicted_category = ml_model.predict([description])[0]
+        predicted_category = str(ml_model.predict([description])[0])
         probabilities = ml_model.predict_proba([description])[0]
-        confidence = max(probabilities)
+        confidence = float(max(probabilities))
 
-        needs_review = confidence < CONFIDENCE_THRESHOLD
+        needs_review = bool(confidence < CONFIDENCE_THRESHOLD)
         category = 'Unknown' if needs_review else predicted_category
         return {
             'category': category,
-            'confidence': round(confidence, 2),
+            'confidence': round(float(confidence), 2),
             'needs_review': needs_review,
             'suggested_category': predicted_category,
             'source': 'ml-model'
