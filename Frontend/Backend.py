@@ -10,6 +10,7 @@ import re
 import json
 from werkzeug.utils import secure_filename
 from datetime import datetime
+import hashlib
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
@@ -17,6 +18,15 @@ from sklearn.pipeline import Pipeline
 import joblib
 import os
 from typing import List, Tuple
+
+try:
+    from openai import OpenAI
+    OPENAI_AVAILABLE = True
+    OPENAI_IMPORT_ERROR = None
+except Exception as openai_err:
+    OpenAI = None
+    OPENAI_AVAILABLE = False
+    OPENAI_IMPORT_ERROR = str(openai_err)
 
 try:
     import pytesseract
@@ -34,9 +44,12 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RUNTIME_DATA_DIR = os.path.join(BASE_DIR, 'runtime_data')
 MODEL_PATH = os.path.join(RUNTIME_DATA_DIR, 'transaction_classifier.pkl')
 LEARNED_FEEDBACK_PATH = os.path.join(RUNTIME_DATA_DIR, 'learned_corrections.json')
+USERS_PATH = os.path.join(RUNTIME_DATA_DIR, 'users.json')
+MANUAL_TRANSACTIONS_PATH = os.path.join(RUNTIME_DATA_DIR, 'manual_transactions.json')
 UPLOADS_DIR = os.path.join(BASE_DIR, 'uploads')
 CONFIDENCE_THRESHOLD = 0.6
 DEFAULT_PORT = int(os.environ.get('PORT', 5001))
+OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-5-mini')
 
 # Training data for ML model
 TRAINING_DATA = [
@@ -125,6 +138,24 @@ def normalize_description(text):
     return normalized
 
 
+def merchant_signature(text):
+    """Create a stable merchant key by removing UPI/reference noise."""
+    normalized = normalize_description(text)
+    stop_words = {
+        'upi', 'ref', 'rrn', 'txn', 'transaction', 'payment', 'paid', 'pay',
+        'to', 'from', 'via', 'id', 'imps', 'neft', 'phonepe', 'paytm',
+        'google', 'gpay', 'bharatpe', 'wallet', 'bank'
+    }
+    tokens = []
+    for token in normalized.split():
+        if token in stop_words or token.isdigit():
+            continue
+        if re.fullmatch(r'[a-z]*\d+[a-z]*', token):
+            continue
+        tokens.append(token)
+    return ' '.join(tokens[:5]) or normalized
+
+
 def load_feedback_data():
     os.makedirs(RUNTIME_DATA_DIR, exist_ok=True)
     if not os.path.exists(LEARNED_FEEDBACK_PATH):
@@ -141,6 +172,153 @@ def save_feedback_data(entries):
     os.makedirs(RUNTIME_DATA_DIR, exist_ok=True)
     with open(LEARNED_FEEDBACK_PATH, 'w', encoding='utf-8') as file:
         json.dump(entries, file, indent=2)
+
+
+def _load_json_file(path, default):
+    os.makedirs(RUNTIME_DATA_DIR, exist_ok=True)
+    if not os.path.exists(path):
+        return default
+    try:
+        with open(path, 'r', encoding='utf-8') as file:
+            data = json.load(file)
+            return data if isinstance(data, type(default)) else default
+    except (OSError, json.JSONDecodeError):
+        return default
+
+
+def _save_json_file(path, data):
+    os.makedirs(RUNTIME_DATA_DIR, exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as file:
+        json.dump(data, file, indent=2)
+
+
+def _hash_password(password):
+    return hashlib.sha256(str(password).encode('utf-8')).hexdigest()
+
+
+def _auth_token(email):
+    token_seed = f"{email}:{os.environ.get('AUTH_SECRET', 'finance-tracker-demo-secret')}"
+    return hashlib.sha256(token_seed.encode('utf-8')).hexdigest()
+
+
+def _public_user(user):
+    return {
+        'id': user['id'],
+        'name': user.get('name') or user['email'].split('@')[0],
+        'email': user['email']
+    }
+
+
+def create_review_questions(transactions):
+    grouped = {}
+    for txn in transactions:
+        description = txn.get('description', '')
+        signature = merchant_signature(description)
+        if not signature or not txn.get('needs_review'):
+            continue
+        if signature not in grouped:
+            grouped[signature] = {
+                'description': description,
+                'merchant_signature': signature,
+                'count': 0,
+                'total_amount': 0,
+                'suggested_category': txn.get('suggested_category') or 'Other',
+                'transaction_ids': []
+            }
+        grouped[signature]['count'] += 1
+        grouped[signature]['total_amount'] += abs(float(txn.get('amount', 0) or 0))
+        grouped[signature]['transaction_ids'].append(txn.get('id'))
+
+    return [
+        {
+            **item,
+            'question': f"Where did you spend on {item['description']}?"
+        }
+        for item in grouped.values()
+        if item['count'] >= 1
+    ]
+
+
+def build_rule_based_ai_insights(transactions):
+    expenses = [t for t in transactions if t.get('type') == 'debit']
+    income = sum(float(t.get('amount', 0) or 0) for t in transactions if t.get('type') == 'credit')
+    total_expenses = sum(abs(float(t.get('amount', 0) or 0)) for t in expenses)
+    category_totals = {}
+    for txn in expenses:
+        category = txn.get('category') or 'Other'
+        category_totals[category] = category_totals.get(category, 0) + abs(float(txn.get('amount', 0) or 0))
+
+    top_category, top_amount = ('No spending yet', 0)
+    if category_totals:
+        top_category, top_amount = max(category_totals.items(), key=lambda item: item[1])
+
+    savings_rate = ((income - total_expenses) / income * 100) if income else 0
+    waste_score = min(100, round((top_amount / total_expenses) * 100)) if total_expenses else 0
+    possible_savings = max(500, round(top_amount * 0.18)) if top_amount else 0
+
+    return {
+        'source': 'rule-engine',
+        'summary': f'{top_category} is your biggest spending area. Current savings rate is {savings_rate:.1f}%.',
+        'waste_areas': [
+            {
+                'title': f'{top_category} concentration',
+                'detail': f'{top_category} accounts for about {waste_score}% of tracked expenses.',
+                'impact': possible_savings
+            },
+            {
+                'title': 'Recurring small spends',
+                'detail': 'Repeated small UPI payments can quietly become a large monthly leak.',
+                'impact': max(300, round(total_expenses * 0.05)) if total_expenses else 0
+            }
+        ],
+        'recommendations': [
+            f'Set a weekly cap for {top_category} and review it every Sunday.',
+            f'Target saving about ₹{possible_savings:,}/month by reducing non-essential repeat payments.',
+            'Mark unknown transactions once; the system will learn and categorize future PDFs automatically.'
+        ],
+        'next_actions': [
+            'Review uncategorized repeated merchants',
+            'Create a budget for the top spending category',
+            'Upload next month statement to compare spending trend'
+        ]
+    }
+
+
+def generate_openai_insights(transactions):
+    fallback = build_rule_based_ai_insights(transactions)
+    api_key = os.environ.get('OPENAI_API_KEY')
+    if not api_key or not OPENAI_AVAILABLE:
+        fallback['openai_ready'] = bool(api_key and OPENAI_AVAILABLE)
+        fallback['setup_hint'] = 'Set OPENAI_API_KEY on Render/local environment to enable OpenAI insights.'
+        return fallback
+
+    sample_transactions = transactions[:80]
+    prompt_payload = {
+        'transactions': sample_transactions,
+        'categories': CATEGORY_OPTIONS,
+        'fallback_summary': fallback
+    }
+
+    try:
+        client = OpenAI(api_key=api_key)
+        response = client.responses.create(
+            model=OPENAI_MODEL,
+            instructions=(
+                'You are a practical Indian personal-finance coach. '
+                'Analyze UPI transactions and return only compact JSON with keys: '
+                'summary, waste_areas, recommendations, next_actions. '
+                'Never provide investment, legal, or tax advice. Focus on budgeting and spending habits.'
+            ),
+            input=json.dumps(prompt_payload)
+        )
+        text = response.output_text
+        parsed = json.loads(text)
+        parsed['source'] = 'openai'
+        return parsed
+    except Exception as exc:
+        fallback['source'] = 'rule-engine-fallback'
+        fallback['openai_error'] = str(exc)
+        return fallback
 
 
 def build_model(training_pairs):
@@ -174,11 +352,12 @@ def rebuild_model():
 
 def get_learned_category(description):
     normalized = normalize_description(description)
+    signature = merchant_signature(description)
     if not normalized:
         return None
 
     for item in load_feedback_data():
-        if item.get('normalized_description') == normalized:
+        if item.get('normalized_description') == normalized or item.get('merchant_signature') == signature:
             return item.get('category')
     return None
 
@@ -768,11 +947,13 @@ def learn_transaction_category(description, category):
         raise ValueError('Invalid category selected.')
 
     feedback_entries = load_feedback_data()
+    signature = merchant_signature(description)
     updated = False
     for item in feedback_entries:
-        if item.get('normalized_description') == normalized:
+        if item.get('normalized_description') == normalized or item.get('merchant_signature') == signature:
             item['description'] = description
             item['category'] = category
+            item['merchant_signature'] = signature
             item['updated_at'] = datetime.utcnow().isoformat(timespec='seconds')
             updated = True
             break
@@ -781,6 +962,7 @@ def learn_transaction_category(description, category):
         feedback_entries.append({
             'description': description,
             'normalized_description': normalized,
+            'merchant_signature': signature,
             'category': category,
             'updated_at': datetime.utcnow().isoformat(timespec='seconds')
         })
@@ -846,11 +1028,129 @@ def upload_statement():
         return jsonify({
             'success': True,
             'transactions': transactions,
-            'count': len(transactions)
+            'count': len(transactions),
+            'review_questions': create_review_questions(transactions)
         })
     
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/auth/register', methods=['POST'])
+def register_user():
+    """Simple demo registration for project login."""
+    data = request.json or {}
+    name = data.get('name', '').strip()
+    email = data.get('email', '').strip().lower()
+    password = data.get('password', '').strip()
+
+    if not email or not password:
+        return jsonify({'error': 'Email and password are required.'}), 400
+
+    users = _load_json_file(USERS_PATH, [])
+    if any(user.get('email') == email for user in users):
+        return jsonify({'error': 'Account already exists. Please login.'}), 409
+
+    user = {
+        'id': hashlib.sha256(email.encode('utf-8')).hexdigest()[:16],
+        'name': name or email.split('@')[0],
+        'email': email,
+        'password_hash': _hash_password(password),
+        'created_at': datetime.utcnow().isoformat(timespec='seconds')
+    }
+    users.append(user)
+    _save_json_file(USERS_PATH, users)
+
+    return jsonify({
+        'success': True,
+        'user': _public_user(user),
+        'token': _auth_token(email)
+    })
+
+
+@app.route('/api/auth/login', methods=['POST'])
+def login_user():
+    """Simple demo login for project users."""
+    data = request.json or {}
+    email = data.get('email', '').strip().lower()
+    password = data.get('password', '').strip()
+
+    users = _load_json_file(USERS_PATH, [])
+    user = next((item for item in users if item.get('email') == email), None)
+    if not user or user.get('password_hash') != _hash_password(password):
+        return jsonify({'error': 'Invalid email or password.'}), 401
+
+    return jsonify({
+        'success': True,
+        'user': _public_user(user),
+        'token': _auth_token(email)
+    })
+
+
+@app.route('/api/transactions/manual', methods=['POST'])
+def add_manual_transaction():
+    """Add one user-entered transaction and categorize it immediately."""
+    data = request.json or {}
+    description = data.get('description', '').strip()
+    category = data.get('category', '').strip()
+    txn_type = data.get('type', 'debit').strip().lower()
+    user_id = data.get('user_id', 'guest')
+
+    try:
+        amount = abs(float(data.get('amount', 0)))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Amount must be a valid number.'}), 400
+
+    if not description or amount <= 0:
+        return jsonify({'error': 'Description and amount are required.'}), 400
+    if txn_type not in {'credit', 'debit'}:
+        return jsonify({'error': 'Transaction type must be credit or debit.'}), 400
+
+    if category and category in CATEGORY_OPTIONS:
+        category_data = {
+            'category': category,
+            'confidence': 1,
+            'needs_review': False,
+            'suggested_category': category,
+            'source': 'manual'
+        }
+        learn_transaction_category(description, category)
+    else:
+        category_data = categorize_transaction(description)
+
+    signed_amount = amount if txn_type == 'credit' else -amount
+    txn = {
+        'id': hashlib.sha256(f"{datetime.utcnow().isoformat()}{description}{amount}".encode('utf-8')).hexdigest()[:16],
+        'date': data.get('date') or datetime.utcnow().date().isoformat(),
+        'description': description,
+        'amount': signed_amount,
+        'type': txn_type,
+        'category': category_data['category'],
+        'confidence': category_data['confidence'],
+        'needs_review': category_data['needs_review'],
+        'suggested_category': category_data['suggested_category'],
+        'learning_source': category_data['source']
+    }
+
+    manual_transactions = _load_json_file(MANUAL_TRANSACTIONS_PATH, {})
+    manual_transactions.setdefault(user_id, []).append(txn)
+    _save_json_file(MANUAL_TRANSACTIONS_PATH, manual_transactions)
+
+    return jsonify({'success': True, 'transaction': txn})
+
+
+@app.route('/api/ai-insights', methods=['POST'])
+def ai_insights():
+    """Generate spending waste and savings recommendations."""
+    data = request.json or {}
+    transactions = data.get('transactions', [])
+    if not isinstance(transactions, list):
+        return jsonify({'error': 'Transactions must be a list.'}), 400
+
+    return jsonify({
+        'success': True,
+        'insights': generate_openai_insights(transactions)
+    })
 
 @app.route('/api/categorize', methods=['POST'])
 def categorize():
@@ -900,6 +1200,7 @@ def retrain_model():
         feedback_entries.append({
             'description': description,
             'normalized_description': normalize_description(description),
+            'merchant_signature': merchant_signature(description),
             'category': category,
             'updated_at': datetime.utcnow().isoformat(timespec='seconds')
         })

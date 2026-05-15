@@ -22,9 +22,14 @@ import {
   IndianRupee,
   Landmark,
   LayoutDashboard,
+  Loader2,
+  Lock,
+  LogOut,
+  Mail,
   Menu,
   Moon,
   PiggyBank,
+  Plus,
   ReceiptText,
   Search,
   Send,
@@ -39,6 +44,7 @@ import {
   TrendingUp,
   UploadCloud,
   Utensils,
+  UserRound,
   Wallet,
   X,
   Zap
@@ -117,6 +123,7 @@ const DEFAULT_API_BASE = import.meta.env.PROD
   ? 'https://ai-personal-finance-tracker-api.onrender.com'
   : 'http://localhost:5001';
 const API_BASE = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE;
+const AUTH_STORAGE_KEY = 'finance-tracker-auth';
 
 const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -193,6 +200,50 @@ const buildMockTransactions = () =>
     learning_source: 'demo'
   }));
 
+const buildLocalAiInsights = (transactions) => {
+  const expenses = transactions.filter((txn) => txn.type === 'debit');
+  const totalExpenses = expenses.reduce((sum, txn) => sum + Math.abs(Number(txn.amount) || 0), 0);
+  const income = transactions
+    .filter((txn) => txn.type === 'credit')
+    .reduce((sum, txn) => sum + Math.abs(Number(txn.amount) || 0), 0);
+  const categoryTotals = expenses.reduce((acc, txn) => {
+    const category = txn.category || 'Other';
+    acc[category] = (acc[category] || 0) + Math.abs(Number(txn.amount) || 0);
+    return acc;
+  }, {});
+  const [topCategory = 'No spend', topAmount = 0] =
+    Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0] || [];
+  const savingsRate = income > 0 ? Math.max(0, ((income - totalExpenses) / income) * 100) : 0;
+  const possibleSavings = topAmount ? Math.max(500, Math.round(topAmount * 0.18)) : 0;
+
+  return {
+    source: 'local-coach',
+    summary: `${topCategory} is your biggest spend area. Current savings rate is ${savingsRate.toFixed(1)}%.`,
+    waste_areas: [
+      {
+        title: `${topCategory} concentration`,
+        detail: `${topCategory} takes ${totalExpenses ? Math.round((topAmount / totalExpenses) * 100) : 0}% of tracked expenses.`,
+        impact: possibleSavings
+      },
+      {
+        title: 'Repeat UPI payments',
+        detail: 'Small repeated payments are useful to review because they silently become monthly leaks.',
+        impact: Math.max(300, Math.round(totalExpenses * 0.05))
+      }
+    ],
+    recommendations: [
+      `Set a weekly limit for ${topCategory}.`,
+      `Try saving ${formatCurrency(possibleSavings || 1200)} per month by reducing non-essential repeats.`,
+      'Correct unknown merchants once; future PDFs will learn from that answer.'
+    ],
+    next_actions: [
+      'Review unknown repeated merchants',
+      'Add a budget for the top category',
+      'Upload next month statement for trend comparison'
+    ]
+  };
+};
+
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
@@ -237,10 +288,32 @@ const CountUp = ({ value, prefix = '', suffix = '' }) => {
 };
 
 function App() {
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY) || '{}')?.user || null;
+    } catch {
+      return null;
+    }
+  });
   const [transactions, setTransactions] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [error, setError] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authMode, setAuthMode] = useState('login');
+  const [authForm, setAuthForm] = useState({ name: '', email: '', password: '' });
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualForm, setManualForm] = useState({
+    date: new Date().toISOString().slice(0, 10),
+    description: '',
+    amount: '',
+    type: 'debit',
+    category: ''
+  });
+  const [reviewQuestions, setReviewQuestions] = useState([]);
+  const [aiCoach, setAiCoach] = useState(null);
+  const [isAiLoading, setIsAiLoading] = useState(false);
   const [correctionDrafts, setCorrectionDrafts] = useState({});
   const [savingCorrectionId, setSavingCorrectionId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -380,6 +453,132 @@ function App() {
       error.toLowerCase().includes(term)
     );
 
+  const handleAuthSubmit = async (event) => {
+    event.preventDefault();
+    setAuthError('');
+    setIsAuthLoading(true);
+
+    try {
+      const response = await fetch(`${API_BASE}/api/auth/${authMode}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(authForm)
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Authentication failed.');
+      }
+
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user: payload.user, token: payload.token }));
+      setCurrentUser(payload.user);
+      setAuthForm({ name: '', email: '', password: '' });
+    } catch (err) {
+      if (err?.message?.toLowerCase?.().includes('fetch')) {
+        const offlineUser = {
+          id: `local-${Date.now()}`,
+          name: authForm.name || authForm.email?.split('@')[0] || 'Uttam',
+          email: authForm.email || 'demo@finsight.ai'
+        };
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user: offlineUser, token: 'offline-demo' }));
+        setCurrentUser(offlineUser);
+      } else {
+        setAuthError(err?.message || 'Could not login right now.');
+      }
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+    setCurrentUser(null);
+    setTransactions([]);
+    setReviewQuestions([]);
+    setAiCoach(null);
+    setActiveTab('dashboard');
+  };
+
+  const handleManualSubmit = async (event) => {
+    event.preventDefault();
+    setError('');
+
+    try {
+      const response = await fetch(`${API_BASE}/api/transactions/manual`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...manualForm,
+          user_id: currentUser?.id || 'guest'
+        })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Could not add the manual transaction.');
+      }
+
+      setTransactions((current) => [payload.transaction, ...current]);
+      setManualOpen(false);
+      setManualForm({
+        date: new Date().toISOString().slice(0, 10),
+        description: '',
+        amount: '',
+        type: 'debit',
+        category: ''
+      });
+      setActiveTab('transactions');
+    } catch (err) {
+      const amount = Math.abs(Number(manualForm.amount) || 0);
+      if (!manualForm.description || !amount) {
+        setError(err?.message || 'Description and amount are required.');
+        return;
+      }
+
+      const fallbackCategory = manualForm.category || categorizeMockML(manualForm.description);
+      const fallbackTxn = {
+        id: `manual-${Date.now()}`,
+        date: manualForm.date,
+        description: manualForm.description,
+        amount: manualForm.type === 'credit' ? amount : -amount,
+        type: manualForm.type,
+        category: fallbackCategory,
+        confidence: manualForm.category ? 1 : 0.72,
+        needs_review: false,
+        suggested_category: fallbackCategory,
+        learning_source: manualForm.category ? 'manual-offline' : 'local-rule'
+      };
+      setTransactions((current) => [fallbackTxn, ...current]);
+      setManualOpen(false);
+      setActiveTab('transactions');
+      setError('Backend was not reachable, so this manual transaction was added locally for this session.');
+    }
+  };
+
+  const handleGenerateAiInsights = async () => {
+    setIsAiLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch(`${API_BASE}/api/ai-insights`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transactions: analyticsTransactions,
+          user: currentUser
+        })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || 'AI coach failed.');
+      }
+      setAiCoach(payload.insights);
+    } catch (err) {
+      setAiCoach(buildLocalAiInsights(analyticsTransactions));
+      setError(err?.message || 'OpenAI coach is using local fallback right now.');
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
   const handleFileUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -408,10 +607,12 @@ function App() {
         ...txn
       }));
       setTransactions(normalized);
+      setReviewQuestions(Array.isArray(payload.review_questions) ? payload.review_questions : []);
       setActiveTab('dashboard');
     } catch (err) {
       setError(err?.message || 'Something went wrong while processing the file.');
       setTransactions([]);
+      setReviewQuestions([]);
     } finally {
       setIsProcessing(false);
       event.target.value = '';
@@ -421,6 +622,7 @@ function App() {
   const handleLoadDemo = () => {
     setError('');
     setCorrectionDrafts({});
+    setReviewQuestions([]);
     setTransactions(buildMockTransactions());
     setActiveTab('dashboard');
   };
@@ -481,12 +683,31 @@ function App() {
         delete next[transaction.id];
         return next;
       });
+      setReviewQuestions((current) =>
+        current.filter((question) => normalizeDescription(question.description) !== targetDescription)
+      );
     } catch (err) {
       setError(err?.message || 'Could not save the correction.');
     } finally {
       setSavingCorrectionId(null);
     }
   };
+
+  if (!currentUser) {
+    return (
+      <AuthScreen
+        authMode={authMode}
+        setAuthMode={setAuthMode}
+        authForm={authForm}
+        setAuthForm={setAuthForm}
+        authError={authError}
+        isAuthLoading={isAuthLoading}
+        handleAuthSubmit={handleAuthSubmit}
+        darkMode={darkMode}
+        setDarkMode={setDarkMode}
+      />
+    );
+  }
 
   const sidebar = (
     <aside className="sidebar">
@@ -589,6 +810,10 @@ function App() {
               >
                 {darkMode ? <Sun size={18} /> : <Moon size={18} />}
               </button>
+              <button type="button" className="secondary-action" onClick={() => setManualOpen(true)}>
+                <Plus size={17} />
+                Add manual
+              </button>
               <input
                 type="file"
                 id="file-upload"
@@ -600,6 +825,13 @@ function App() {
                 <UploadCloud size={18} />
                 {isProcessing ? 'Processing' : 'Upload'}
               </label>
+              <div className="user-chip" title={currentUser.email}>
+                <UserRound size={16} />
+                <span>{currentUser.name}</span>
+              </div>
+              <button type="button" className="icon-button" aria-label="Logout" onClick={handleLogout}>
+                <LogOut size={17} />
+              </button>
             </div>
           </header>
 
@@ -643,6 +875,7 @@ function App() {
                   financialHealth={financialHealth}
                   hasLiveData={hasLiveData}
                   handleLoadDemo={handleLoadDemo}
+                  currentUser={currentUser}
                 />
               ) : null}
 
@@ -658,6 +891,7 @@ function App() {
                   savingCorrectionId={savingCorrectionId}
                   handleCorrectionChange={handleCorrectionChange}
                   handleSaveCorrection={handleSaveCorrection}
+                  reviewQuestions={reviewQuestions}
                 />
               ) : null}
 
@@ -674,7 +908,14 @@ function App() {
               ) : null}
 
               {activeTab === 'insights' ? (
-                <InsightsView smartInsights={smartInsights} financialHealth={financialHealth} />
+                <InsightsView
+                  smartInsights={smartInsights}
+                  financialHealth={financialHealth}
+                  aiCoach={aiCoach}
+                  isAiLoading={isAiLoading}
+                  handleGenerateAiInsights={handleGenerateAiInsights}
+                  analyticsTransactions={analyticsTransactions}
+                />
               ) : null}
 
               {activeTab === 'budgets' ? <BudgetsView budgets={budgets} goals={goals} /> : null}
@@ -686,7 +927,277 @@ function App() {
           </AnimatePresence>
         </main>
       </div>
+
+      <AnimatePresence>
+        {manualOpen ? (
+          <ManualTransactionModal
+            manualForm={manualForm}
+            setManualForm={setManualForm}
+            setManualOpen={setManualOpen}
+            handleManualSubmit={handleManualSubmit}
+          />
+        ) : null}
+      </AnimatePresence>
     </div>
+  );
+}
+
+function AuthScreen({
+  authMode,
+  setAuthMode,
+  authForm,
+  setAuthForm,
+  authError,
+  isAuthLoading,
+  handleAuthSubmit,
+  darkMode,
+  setDarkMode
+}) {
+  const isRegister = authMode === 'register';
+
+  return (
+    <div className={`app-root auth-root ${darkMode ? 'dark' : ''}`}>
+      <div className="background-field" aria-hidden="true">
+        <div className="mesh mesh-one" />
+        <div className="mesh mesh-two" />
+        <div className="mesh mesh-three" />
+      </div>
+      <motion.main
+        className="auth-shell"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45 }}
+      >
+        <section className="auth-panel">
+          <div className="brand auth-brand">
+            <div className="brand-mark">
+              <Wallet size={22} />
+            </div>
+            <div>
+              <strong>FinSight AI</strong>
+              <span>Personal finance intelligence</span>
+            </div>
+          </div>
+          <span className="eyebrow">
+            <Sparkles size={14} />
+            AI powered UPI tracker
+          </span>
+          <h1>Login and let your finance dashboard remember what it learns.</h1>
+          <p>
+            Upload statements, manually add expenses, correct unknown merchants once, and the system will reuse
+            that learning for future PDFs.
+          </p>
+          <div className="auth-feature-grid">
+            <div>
+              <BrainCircuit size={20} />
+              <strong>Learning categories</strong>
+              <span>Repeated unknown spends become automatic next time.</span>
+            </div>
+            <div>
+              <Plus size={20} />
+              <strong>Manual transactions</strong>
+              <span>Add cash, UPI, or income entries without a PDF.</span>
+            </div>
+            <div>
+              <Bot size={20} />
+              <strong>AI saving coach</strong>
+              <span>Find waste areas and simple savings actions.</span>
+            </div>
+          </div>
+        </section>
+
+        <section className="auth-card">
+          <div className="auth-card-head">
+            <div>
+              <span className="eyebrow">{isRegister ? 'Create account' : 'Welcome back'}</span>
+              <h2>{isRegister ? 'Start tracking smarter' : 'Login to continue'}</h2>
+            </div>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Toggle dark mode"
+              onClick={() => setDarkMode((value) => !value)}
+            >
+              {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+          </div>
+
+          <form className="auth-form" onSubmit={handleAuthSubmit}>
+            {isRegister ? (
+              <label className="form-field">
+                <span>Name</span>
+                <div>
+                  <UserRound size={17} />
+                  <input
+                    value={authForm.name}
+                    onChange={(event) => setAuthForm((current) => ({ ...current, name: event.target.value }))}
+                    placeholder="Uttam Mishra"
+                  />
+                </div>
+              </label>
+            ) : null}
+            <label className="form-field">
+              <span>Email</span>
+              <div>
+                <Mail size={17} />
+                <input
+                  type="email"
+                  required
+                  value={authForm.email}
+                  onChange={(event) => setAuthForm((current) => ({ ...current, email: event.target.value }))}
+                  placeholder="you@example.com"
+                />
+              </div>
+            </label>
+            <label className="form-field">
+              <span>Password</span>
+              <div>
+                <Lock size={17} />
+                <input
+                  type="password"
+                  required
+                  minLength={4}
+                  value={authForm.password}
+                  onChange={(event) => setAuthForm((current) => ({ ...current, password: event.target.value }))}
+                  placeholder="Minimum 4 characters"
+                />
+              </div>
+            </label>
+            {authError ? (
+              <div className="error-banner compact">
+                <AlertTriangle size={17} />
+                <span>{authError}</span>
+              </div>
+            ) : null}
+            <button type="submit" className="primary-action auth-submit" disabled={isAuthLoading}>
+              {isAuthLoading ? <Loader2 size={18} className="spin" /> : <ShieldCheck size={18} />}
+              {isAuthLoading ? 'Please wait' : isRegister ? 'Create account' : 'Login'}
+            </button>
+          </form>
+
+          <button
+            type="button"
+            className="auth-switch"
+            onClick={() => {
+              setAuthMode(isRegister ? 'login' : 'register');
+            }}
+          >
+            {isRegister ? 'Already have an account? Login' : 'New here? Create account'}
+          </button>
+        </section>
+      </motion.main>
+    </div>
+  );
+}
+
+function ManualTransactionModal({ manualForm, setManualForm, setManualOpen, handleManualSubmit }) {
+  return (
+    <motion.div
+      className="modal-backdrop"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onMouseDown={() => setManualOpen(false)}
+    >
+      <motion.section
+        className="manual-modal"
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 14, scale: 0.98 }}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="modal-head">
+          <div>
+            <span className="eyebrow">Manual entry</span>
+            <h2>Add transaction</h2>
+          </div>
+          <button type="button" className="icon-button" onClick={() => setManualOpen(false)}>
+            <X size={18} />
+          </button>
+        </div>
+        <form className="manual-form" onSubmit={handleManualSubmit}>
+          <label className="form-field">
+            <span>Date</span>
+            <div>
+              <Calendar size={17} />
+              <input
+                type="date"
+                value={manualForm.date}
+                onChange={(event) => setManualForm((current) => ({ ...current, date: event.target.value }))}
+              />
+            </div>
+          </label>
+          <label className="form-field">
+            <span>Description</span>
+            <div>
+              <ReceiptText size={17} />
+              <input
+                required
+                value={manualForm.description}
+                onChange={(event) => setManualForm((current) => ({ ...current, description: event.target.value }))}
+                placeholder="Example: Campus canteen"
+              />
+            </div>
+          </label>
+          <label className="form-field">
+            <span>Amount</span>
+            <div>
+              <IndianRupee size={17} />
+              <input
+                required
+                min="1"
+                step="0.01"
+                type="number"
+                value={manualForm.amount}
+                onChange={(event) => setManualForm((current) => ({ ...current, amount: event.target.value }))}
+                placeholder="500"
+              />
+            </div>
+          </label>
+          <div className="form-grid">
+            <label className="form-field">
+              <span>Type</span>
+              <div>
+                <TrendingUp size={17} />
+                <select
+                  value={manualForm.type}
+                  onChange={(event) => setManualForm((current) => ({ ...current, type: event.target.value }))}
+                >
+                  <option value="debit">Expense</option>
+                  <option value="credit">Income</option>
+                </select>
+              </div>
+            </label>
+            <label className="form-field">
+              <span>Category</span>
+              <div>
+                <SlidersHorizontal size={17} />
+                <select
+                  value={manualForm.category}
+                  onChange={(event) => setManualForm((current) => ({ ...current, category: event.target.value }))}
+                >
+                  <option value="">Auto detect</option>
+                  {CATEGORY_OPTIONS.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </label>
+          </div>
+          <div className="form-actions">
+            <button type="button" className="ghost-action" onClick={() => setManualOpen(false)}>
+              Cancel
+            </button>
+            <button type="submit" className="primary-action">
+              <Plus size={17} />
+              Add transaction
+            </button>
+          </div>
+        </form>
+      </motion.section>
+    </motion.div>
   );
 }
 
@@ -703,7 +1214,8 @@ function DashboardView({
   smartInsights,
   financialHealth,
   hasLiveData,
-  handleLoadDemo
+  handleLoadDemo,
+  currentUser
 }) {
   return (
     <motion.div variants={stagger} initial="hidden" animate="visible" className="content-grid">
@@ -714,7 +1226,7 @@ function DashboardView({
             <Sparkles size={14} />
             AI finance operating system
           </span>
-          <h1>Good evening, Uttam. Your money story is getting clearer.</h1>
+          <h1>Good evening, {currentUser?.name || 'Uttam'}. Your money story is getting clearer.</h1>
           <p>
             {hasLiveData
               ? 'Your latest UPI statement has been analyzed with category intelligence and smart spending signals.'
@@ -985,7 +1497,8 @@ function TransactionsView({
   correctionDrafts,
   savingCorrectionId,
   handleCorrectionChange,
-  handleSaveCorrection
+  handleSaveCorrection,
+  reviewQuestions
 }) {
   return (
     <motion.div variants={stagger} initial="hidden" animate="visible" className="view-panel">
@@ -1022,6 +1535,14 @@ function TransactionsView({
           <ChevronDown size={16} />
         </div>
       </motion.div>
+
+      <ReviewQueue
+        reviewQuestions={reviewQuestions}
+        correctionDrafts={correctionDrafts}
+        savingCorrectionId={savingCorrectionId}
+        handleCorrectionChange={handleCorrectionChange}
+        handleSaveCorrection={handleSaveCorrection}
+      />
 
       <motion.div variants={item} className="glass-card transaction-card">
         {transactions.length === 0 ? (
@@ -1123,6 +1644,70 @@ function TransactionsView({
   );
 }
 
+function ReviewQueue({
+  reviewQuestions,
+  correctionDrafts,
+  savingCorrectionId,
+  handleCorrectionChange,
+  handleSaveCorrection
+}) {
+  if (!reviewQuestions?.length) return null;
+
+  return (
+    <motion.div variants={item} className="review-queue glass-card">
+      <div className="review-queue-head">
+        <div>
+          <span className="eyebrow">Learning queue</span>
+          <h2>Teach the system once</h2>
+          <p>If this merchant appears again in any future PDF, it will auto-categorize it.</p>
+        </div>
+        <span className="review-count">{reviewQuestions.length} questions</span>
+      </div>
+      <div className="review-question-grid">
+        {reviewQuestions.slice(0, 4).map((question) => {
+          const id = `review-${normalizeDescription(question.description)}`;
+          const draft = correctionDrafts[id] || question.suggested_category || '';
+          const pseudoTransaction = {
+            id,
+            description: question.description,
+            category: 'Unknown',
+            suggested_category: draft,
+            needs_review: true
+          };
+
+          return (
+            <div className="review-question-card" key={id}>
+              <span className="source-pill">
+                <HelpCircle size={14} />
+                {question.count} repeat
+              </span>
+              <h3>{question.question}</h3>
+              <p>Total matched amount: {formatCurrency(question.total_amount)}</p>
+              <div className="review-controls">
+                <select
+                  value={draft}
+                  onChange={(event) => handleCorrectionChange(id, event.target.value)}
+                  disabled={savingCorrectionId === id}
+                >
+                  <option value="">Choose category</option>
+                  {CATEGORY_OPTIONS.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" onClick={() => handleSaveCorrection(pseudoTransaction)}>
+                  {savingCorrectionId === id ? 'Saving' : 'Learn'}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </motion.div>
+  );
+}
+
 function AnalyticsView({ categoryData, monthlyData, incomeExpenseData, averageConfidence, dailySpend, topCategory, totalExpenses }) {
   return (
     <motion.div variants={stagger} initial="hidden" animate="visible" className="content-grid">
@@ -1178,7 +1763,14 @@ function AnalyticsView({ categoryData, monthlyData, incomeExpenseData, averageCo
   );
 }
 
-function InsightsView({ smartInsights, financialHealth }) {
+function InsightsView({
+  smartInsights,
+  financialHealth,
+  aiCoach,
+  isAiLoading,
+  handleGenerateAiInsights,
+  analyticsTransactions
+}) {
   return (
     <motion.div variants={stagger} initial="hidden" animate="visible" className="content-grid">
       <motion.div variants={item} className="section-heading">
@@ -1186,6 +1778,15 @@ function InsightsView({ smartInsights, financialHealth }) {
           <span className="eyebrow">AI copilot</span>
           <h1>Financial decisions, translated</h1>
         </div>
+        <button
+          type="button"
+          className="primary-action"
+          onClick={handleGenerateAiInsights}
+          disabled={isAiLoading || analyticsTransactions.length === 0}
+        >
+          {isAiLoading ? <Loader2 size={18} className="spin" /> : <Bot size={18} />}
+          {isAiLoading ? 'Thinking' : 'Ask AI Coach'}
+        </button>
       </motion.div>
       <motion.div variants={item} className="insight-layout">
         <AIInsightsCard smartInsights={smartInsights} />
@@ -1204,7 +1805,84 @@ function InsightsView({ smartInsights, financialHealth }) {
           </div>
         </GlassCard>
       </motion.div>
+      <motion.div variants={item}>
+        <AiCoachResults aiCoach={aiCoach} isAiLoading={isAiLoading} />
+      </motion.div>
     </motion.div>
+  );
+}
+
+function AiCoachResults({ aiCoach, isAiLoading }) {
+  if (isAiLoading) {
+    return (
+      <GlassCard title="AI Savings Coach" icon={Bot}>
+        <div className="coach-loading">
+          <Loader2 size={22} className="spin" />
+          <span>Finding waste areas, recurring patterns, and practical saving moves...</span>
+        </div>
+      </GlassCard>
+    );
+  }
+
+  if (!aiCoach) {
+    return (
+      <GlassCard title="AI Savings Coach" icon={Bot}>
+        <EmptyState
+          title="Ask the AI coach"
+          text="Click Ask AI Coach to generate personalized waste analysis, savings ideas, and next actions from your transactions."
+          icon={BrainCircuit}
+        />
+      </GlassCard>
+    );
+  }
+
+  return (
+    <GlassCard title="AI Savings Coach" icon={Bot}>
+      <div className="coach-card">
+        <div className="coach-summary">
+          <span className="source-pill">
+            <Sparkles size={14} />
+            {aiCoach.source === 'openai' ? 'OpenAI insight' : 'Rule-based fallback'}
+          </span>
+          <h3>{aiCoach.summary}</h3>
+        </div>
+        <div className="coach-grid">
+          <div>
+            <h4>Waste areas</h4>
+            <div className="coach-list">
+              {(aiCoach.waste_areas || []).map((area, index) => (
+                <div className="recommendation-card" key={`${area.title}-${index}`}>
+                  <strong>{area.title}</strong>
+                  <p>{area.detail}</p>
+                  {area.impact ? <span>Potential save: {formatCurrency(area.impact)}</span> : null}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <h4>Savings recommendations</h4>
+            <div className="coach-list">
+              {(aiCoach.recommendations || []).map((recommendation, index) => (
+                <div className="recommendation-card compact-card" key={`${recommendation}-${index}`}>
+                  <CheckCircle2 size={17} />
+                  <span>{recommendation}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        {aiCoach.next_actions?.length ? (
+          <div className="next-actions">
+            <h4>Next actions</h4>
+            {aiCoach.next_actions.map((action, index) => (
+              <span key={action}>
+                {index + 1}. {action}
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </GlassCard>
   );
 }
 
