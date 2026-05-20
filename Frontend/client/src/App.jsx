@@ -124,6 +124,28 @@ const DEFAULT_API_BASE = import.meta.env.PROD
   : 'http://localhost:5001';
 const API_BASE = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE;
 const AUTH_STORAGE_KEY = 'finance-tracker-auth';
+const CUSTOM_CATEGORY_STORAGE_KEY = 'finance-tracker-custom-categories';
+
+const getStoredCustomCategories = () => {
+  try {
+    const stored = JSON.parse(localStorage.getItem(CUSTOM_CATEGORY_STORAGE_KEY) || '[]');
+    return Array.isArray(stored) ? stored.filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+};
+
+const mergeCategoryOptions = (customCategories = []) => {
+  const baseWithoutOther = CATEGORY_OPTIONS.filter((category) => category !== 'Other');
+  const baseKeys = new Set(CATEGORY_OPTIONS.map((category) => category.toLowerCase()));
+  const cleanedCustom = customCategories
+    .map((category) => String(category || '').trim())
+    .filter((category, index, list) => category && !baseKeys.has(category.toLowerCase()) &&
+      list.findIndex((item) => item.toLowerCase() === category.toLowerCase()) === index)
+    .sort((a, b) => a.localeCompare(b));
+
+  return [...baseWithoutOther, ...cleanedCustom, 'Other'];
+};
 
 const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -320,14 +342,66 @@ function App() {
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [darkMode, setDarkMode] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [customCategories, setCustomCategories] = useState(getStoredCustomCategories);
 
   useEffect(() => {
     document.body.classList.toggle('dark', darkMode);
   }, [darkMode]);
 
+  useEffect(() => {
+    const loadServerCategories = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/categories`);
+        const payload = await response.json().catch(() => ({}));
+        if (response.ok && Array.isArray(payload.custom_categories)) {
+          setCustomCategories((current) =>
+            mergeCategoryOptions([...current, ...payload.custom_categories]).filter(
+              (category) => !CATEGORY_OPTIONS.includes(category)
+            )
+          );
+        }
+      } catch {
+        // Local custom categories still work even when backend category sync is unavailable.
+      }
+    };
+
+    loadServerCategories();
+  }, []);
+
   const demoTransactions = useMemo(() => buildMockTransactions(), []);
   const hasLiveData = transactions.length > 0;
   const analyticsTransactions = hasLiveData ? transactions : demoTransactions;
+  const learnedCategoryNames = useMemo(() => {
+    const values = [
+      ...transactions.map((txn) => txn.category),
+      ...transactions.map((txn) => txn.suggested_category),
+      ...reviewQuestions.map((question) => question.suggested_category)
+    ];
+    return values.filter((category) => category && category !== 'Unknown');
+  }, [transactions, reviewQuestions]);
+  const categoryOptions = useMemo(
+    () => mergeCategoryOptions([...customCategories, ...learnedCategoryNames]),
+    [customCategories, learnedCategoryNames]
+  );
+
+  useEffect(() => {
+    localStorage.setItem(CUSTOM_CATEGORY_STORAGE_KEY, JSON.stringify(customCategories));
+  }, [customCategories]);
+
+  const rememberCustomCategory = (category) => {
+    const cleaned = String(category || '').trim();
+    if (!cleaned || CATEGORY_OPTIONS.some((option) => option.toLowerCase() === cleaned.toLowerCase())) {
+      return cleaned;
+    }
+
+    setCustomCategories((current) => {
+      if (current.some((option) => option.toLowerCase() === cleaned.toLowerCase())) {
+        return current;
+      }
+      return [...current, cleaned].sort((a, b) => a.localeCompare(b));
+    });
+    return cleaned;
+  };
 
   const { totalIncome, totalExpenses, balance } = useMemo(() => {
     const income = analyticsTransactions
@@ -501,13 +575,17 @@ function App() {
   const handleManualSubmit = async (event) => {
     event.preventDefault();
     setError('');
+    const preparedManualForm = {
+      ...manualForm,
+      category: rememberCustomCategory(manualForm.category)
+    };
 
     try {
       const response = await fetch(`${API_BASE}/api/transactions/manual`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...manualForm,
+          ...preparedManualForm,
           user_id: currentUser?.id || 'guest'
         })
       });
@@ -527,24 +605,24 @@ function App() {
       });
       setActiveTab('transactions');
     } catch (err) {
-      const amount = Math.abs(Number(manualForm.amount) || 0);
-      if (!manualForm.description || !amount) {
+      const amount = Math.abs(Number(preparedManualForm.amount) || 0);
+      if (!preparedManualForm.description || !amount) {
         setError(err?.message || 'Description and amount are required.');
         return;
       }
 
-      const fallbackCategory = manualForm.category || categorizeMockML(manualForm.description);
+      const fallbackCategory = preparedManualForm.category || categorizeMockML(preparedManualForm.description);
       const fallbackTxn = {
         id: `manual-${Date.now()}`,
-        date: manualForm.date,
-        description: manualForm.description,
-        amount: manualForm.type === 'credit' ? amount : -amount,
-        type: manualForm.type,
+        date: preparedManualForm.date,
+        description: preparedManualForm.description,
+        amount: preparedManualForm.type === 'credit' ? amount : -amount,
+        type: preparedManualForm.type,
         category: fallbackCategory,
-        confidence: manualForm.category ? 1 : 0.72,
+        confidence: preparedManualForm.category ? 1 : 0.72,
         needs_review: false,
         suggested_category: fallbackCategory,
-        learning_source: manualForm.category ? 'manual-offline' : 'local-rule'
+        learning_source: preparedManualForm.category ? 'manual-offline' : 'local-rule'
       };
       setTransactions((current) => [fallbackTxn, ...current]);
       setManualOpen(false);
@@ -635,10 +713,11 @@ function App() {
   };
 
   const handleSaveCorrection = async (transaction) => {
-    const selectedCategory =
+    const selectedCategory = rememberCustomCategory(
       correctionDrafts[transaction.id] ||
-      (transaction.category !== 'Unknown' ? transaction.category : transaction.suggested_category) ||
-      '';
+        (transaction.category !== 'Unknown' ? transaction.category : transaction.suggested_category) ||
+        ''
+    );
 
     if (!selectedCategory) {
       setError('Select a category before saving the correction.');
@@ -892,6 +971,7 @@ function App() {
                   handleCorrectionChange={handleCorrectionChange}
                   handleSaveCorrection={handleSaveCorrection}
                   reviewQuestions={reviewQuestions}
+                  categoryOptions={categoryOptions}
                 />
               ) : null}
 
@@ -935,6 +1015,7 @@ function App() {
             setManualForm={setManualForm}
             setManualOpen={setManualOpen}
             handleManualSubmit={handleManualSubmit}
+            categoryOptions={categoryOptions}
           />
         ) : null}
       </AnimatePresence>
@@ -1090,7 +1171,7 @@ function AuthScreen({
   );
 }
 
-function ManualTransactionModal({ manualForm, setManualForm, setManualOpen, handleManualSubmit }) {
+function ManualTransactionModal({ manualForm, setManualForm, setManualOpen, handleManualSubmit, categoryOptions }) {
   return (
     <motion.div
       className="modal-backdrop"
@@ -1170,20 +1251,12 @@ function ManualTransactionModal({ manualForm, setManualForm, setManualOpen, hand
             </label>
             <label className="form-field">
               <span>Category</span>
-              <div>
-                <SlidersHorizontal size={17} />
-                <select
-                  value={manualForm.category}
-                  onChange={(event) => setManualForm((current) => ({ ...current, category: event.target.value }))}
-                >
-                  <option value="">Auto detect</option>
-                  {CATEGORY_OPTIONS.map((category) => (
-                    <option key={category} value={category}>
-                      {category}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <CategorySelect
+                value={manualForm.category}
+                options={categoryOptions}
+                placeholder="Auto detect"
+                onChange={(category) => setManualForm((current) => ({ ...current, category }))}
+              />
             </label>
           </div>
           <div className="form-actions">
@@ -1198,6 +1271,64 @@ function ManualTransactionModal({ manualForm, setManualForm, setManualOpen, hand
         </form>
       </motion.section>
     </motion.div>
+  );
+}
+
+function CategorySelect({ value, options, onChange, disabled = false, placeholder = 'Choose category' }) {
+  const isKnownCategory = options.some((category) => category === value);
+  const [isCustom, setIsCustom] = useState(Boolean(value && !isKnownCategory));
+  const [customValue, setCustomValue] = useState(value && !isKnownCategory ? value : '');
+
+  useEffect(() => {
+    if (value && !options.some((category) => category === value)) {
+      setIsCustom(true);
+      setCustomValue(value);
+    }
+  }, [value, options]);
+
+  return (
+    <div className="category-picker">
+      <div className="category-picker-select">
+        <SlidersHorizontal size={17} />
+        <select
+          value={isCustom ? '__custom__' : value || ''}
+          onChange={(event) => {
+            const nextValue = event.target.value;
+            if (nextValue === '__custom__') {
+              setIsCustom(true);
+              setCustomValue('');
+              onChange('');
+              return;
+            }
+            setIsCustom(false);
+            setCustomValue('');
+            onChange(nextValue);
+          }}
+          disabled={disabled}
+        >
+          <option value="">{placeholder}</option>
+          {options.map((category) => (
+            <option key={category} value={category}>
+              {category}
+            </option>
+          ))}
+          <option value="__custom__">+ Add custom category</option>
+        </select>
+      </div>
+      {isCustom ? (
+        <input
+          autoFocus
+          className="custom-category-input"
+          value={customValue}
+          onChange={(event) => {
+            setCustomValue(event.target.value);
+            onChange(event.target.value.trim());
+          }}
+          disabled={disabled}
+          placeholder="Type category, e.g. Hostel"
+        />
+      ) : null}
+    </div>
   );
 }
 
@@ -1498,7 +1629,8 @@ function TransactionsView({
   savingCorrectionId,
   handleCorrectionChange,
   handleSaveCorrection,
-  reviewQuestions
+  reviewQuestions,
+  categoryOptions
 }) {
   return (
     <motion.div variants={stagger} initial="hidden" animate="visible" className="view-panel">
@@ -1526,7 +1658,7 @@ function TransactionsView({
           <SlidersHorizontal size={17} />
           <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
             <option value="All">All categories</option>
-            {CATEGORY_OPTIONS.map((category) => (
+            {categoryOptions.map((category) => (
               <option key={category} value={category}>
                 {category}
               </option>
@@ -1542,6 +1674,7 @@ function TransactionsView({
         savingCorrectionId={savingCorrectionId}
         handleCorrectionChange={handleCorrectionChange}
         handleSaveCorrection={handleSaveCorrection}
+        categoryOptions={categoryOptions}
       />
 
       <motion.div variants={item} className="glass-card transaction-card">
@@ -1599,21 +1732,16 @@ function TransactionsView({
                       <td>
                         {txn.needs_review ? (
                           <div className="review-controls">
-                            <select
+                            <CategorySelect
                               value={
                                 correctionDrafts[txn.id] ||
                                 (txn.category !== 'Unknown' ? txn.category : txn.suggested_category || '')
                               }
-                              onChange={(event) => handleCorrectionChange(txn.id, event.target.value)}
+                              onChange={(category) => handleCorrectionChange(txn.id, category)}
                               disabled={savingCorrectionId === txn.id}
-                            >
-                              <option value="">Select</option>
-                              {CATEGORY_OPTIONS.map((category) => (
-                                <option key={category} value={category}>
-                                  {category}
-                                </option>
-                              ))}
-                            </select>
+                              options={categoryOptions}
+                              placeholder="Select"
+                            />
                             <button
                               type="button"
                               onClick={() => handleSaveCorrection(txn)}
@@ -1649,7 +1777,8 @@ function ReviewQueue({
   correctionDrafts,
   savingCorrectionId,
   handleCorrectionChange,
-  handleSaveCorrection
+  handleSaveCorrection,
+  categoryOptions
 }) {
   if (!reviewQuestions?.length) return null;
 
@@ -1684,18 +1813,13 @@ function ReviewQueue({
               <h3>{question.question}</h3>
               <p>Total matched amount: {formatCurrency(question.total_amount)}</p>
               <div className="review-controls">
-                <select
+                <CategorySelect
                   value={draft}
-                  onChange={(event) => handleCorrectionChange(id, event.target.value)}
+                  onChange={(category) => handleCorrectionChange(id, category)}
                   disabled={savingCorrectionId === id}
-                >
-                  <option value="">Choose category</option>
-                  {CATEGORY_OPTIONS.map((category) => (
-                    <option key={category} value={category}>
-                      {category}
-                    </option>
-                  ))}
-                </select>
+                  options={categoryOptions}
+                  placeholder="Choose category"
+                />
                 <button type="button" onClick={() => handleSaveCorrection(pseudoTransaction)}>
                   {savingCorrectionId === id ? 'Saving' : 'Learn'}
                 </button>
