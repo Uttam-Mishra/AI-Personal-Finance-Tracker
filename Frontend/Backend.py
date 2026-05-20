@@ -46,6 +46,7 @@ MODEL_PATH = os.path.join(RUNTIME_DATA_DIR, 'transaction_classifier.pkl')
 LEARNED_FEEDBACK_PATH = os.path.join(RUNTIME_DATA_DIR, 'learned_corrections.json')
 USERS_PATH = os.path.join(RUNTIME_DATA_DIR, 'users.json')
 MANUAL_TRANSACTIONS_PATH = os.path.join(RUNTIME_DATA_DIR, 'manual_transactions.json')
+CUSTOM_CATEGORIES_PATH = os.path.join(RUNTIME_DATA_DIR, 'custom_categories.json')
 UPLOADS_DIR = os.path.join(BASE_DIR, 'uploads')
 CONFIDENCE_THRESHOLD = 0.6
 DEFAULT_PORT = int(os.environ.get('PORT', 5001))
@@ -130,7 +131,8 @@ TRAINING_DATA = [
     ("Wallet transfer", "Transfer"),
 ]
 
-CATEGORY_OPTIONS = sorted({item[1] for item in TRAINING_DATA})
+BASE_CATEGORY_OPTIONS = sorted({item[1] for item in TRAINING_DATA})
+CATEGORY_OPTIONS = BASE_CATEGORY_OPTIONS
 
 def normalize_description(text):
     normalized = re.sub(r'[^a-z0-9\s]', ' ', str(text).lower())
@@ -172,6 +174,71 @@ def save_feedback_data(entries):
     os.makedirs(RUNTIME_DATA_DIR, exist_ok=True)
     with open(LEARNED_FEEDBACK_PATH, 'w', encoding='utf-8') as file:
         json.dump(entries, file, indent=2)
+
+
+def _json_safe(value):
+    """Convert NumPy/Pandas scalar values into normal JSON-safe Python values."""
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(item) for item in value]
+    if hasattr(value, 'item') and callable(value.item):
+        try:
+            return _json_safe(value.item())
+        except Exception:
+            pass
+    return value
+
+
+def safe_jsonify(payload, status=None):
+    response = jsonify(_json_safe(payload))
+    if status is not None:
+        response.status_code = status
+    return response
+
+
+def sanitize_category(category):
+    cleaned = re.sub(r'\s+', ' ', str(category or '')).strip()
+    if not cleaned:
+        raise ValueError('Category is required.')
+    if len(cleaned) > 40:
+        raise ValueError('Category must be 40 characters or less.')
+    if cleaned.lower() in {'unknown', 'select', 'choose category'}:
+        raise ValueError('Please enter a real category name.')
+    return cleaned
+
+
+def load_custom_categories():
+    custom = _load_json_file(CUSTOM_CATEGORIES_PATH, [])
+    learned = [
+        item.get('category', '').strip()
+        for item in load_feedback_data()
+        if item.get('category', '').strip()
+    ]
+    categories = []
+    seen = set()
+    for category in custom + learned:
+        key = category.lower()
+        if category and key not in seen and category not in BASE_CATEGORY_OPTIONS:
+            categories.append(category)
+            seen.add(key)
+    return sorted(categories, key=str.lower)
+
+
+def get_category_options():
+    return sorted(set(BASE_CATEGORY_OPTIONS + load_custom_categories()), key=str.lower)
+
+
+def remember_custom_category(category):
+    category = sanitize_category(category)
+    if category in BASE_CATEGORY_OPTIONS:
+        return category
+
+    custom = _load_json_file(CUSTOM_CATEGORIES_PATH, [])
+    if category.lower() not in {item.lower() for item in custom}:
+        custom.append(category)
+        _save_json_file(CUSTOM_CATEGORIES_PATH, sorted(custom, key=str.lower))
+    return category
 
 
 def _load_json_file(path, default):
@@ -295,7 +362,7 @@ def generate_openai_insights(transactions):
     sample_transactions = transactions[:80]
     prompt_payload = {
         'transactions': sample_transactions,
-        'categories': CATEGORY_OPTIONS,
+        'categories': get_category_options(),
         'fallback_summary': fallback
     }
 
@@ -943,8 +1010,7 @@ def learn_transaction_category(description, category):
     normalized = normalize_description(description)
     if not normalized:
         raise ValueError('Description is required.')
-    if category not in CATEGORY_OPTIONS:
-        raise ValueError('Invalid category selected.')
+    category = remember_custom_category(category)
 
     feedback_entries = load_feedback_data()
     signature = merchant_signature(description)
@@ -1025,7 +1091,7 @@ def upload_statement():
         # Clean up uploaded file
         os.remove(upload_path)
         
-        return jsonify({
+        return safe_jsonify({
             'success': True,
             'transactions': transactions,
             'count': len(transactions),
@@ -1106,7 +1172,11 @@ def add_manual_transaction():
     if txn_type not in {'credit', 'debit'}:
         return jsonify({'error': 'Transaction type must be credit or debit.'}), 400
 
-    if category and category in CATEGORY_OPTIONS:
+    if category:
+        try:
+            category = remember_custom_category(category)
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
         category_data = {
             'category': category,
             'confidence': 1,
@@ -1136,7 +1206,7 @@ def add_manual_transaction():
     manual_transactions.setdefault(user_id, []).append(txn)
     _save_json_file(MANUAL_TRANSACTIONS_PATH, manual_transactions)
 
-    return jsonify({'success': True, 'transaction': txn})
+    return safe_jsonify({'success': True, 'transaction': txn})
 
 
 @app.route('/api/ai-insights', methods=['POST'])
@@ -1147,7 +1217,7 @@ def ai_insights():
     if not isinstance(transactions, list):
         return jsonify({'error': 'Transactions must be a list.'}), 400
 
-    return jsonify({
+    return safe_jsonify({
         'success': True,
         'insights': generate_openai_insights(transactions)
     })
@@ -1158,7 +1228,18 @@ def categorize():
     data = request.json
     description = data.get('description', '')
 
-    return jsonify(categorize_transaction(description))
+    return safe_jsonify(categorize_transaction(description))
+
+
+@app.route('/api/categories', methods=['GET'])
+def list_categories():
+    """Return built-in and user-created categories."""
+    return safe_jsonify({
+        'success': True,
+        'categories': get_category_options(),
+        'base_categories': BASE_CATEGORY_OPTIONS,
+        'custom_categories': load_custom_categories()
+    })
 
 
 @app.route('/api/feedback', methods=['POST'])
@@ -1178,7 +1259,7 @@ def save_feedback():
     except ValueError as exc:
         return jsonify({'error': str(exc)}), 400
 
-    return jsonify({
+    return safe_jsonify({
         'success': True,
         'category': category,
         'message': 'Correction saved. Future matching transactions will use this category.'
@@ -1195,7 +1276,11 @@ def retrain_model():
     for item in new_training_data:
         description = item.get('description', '').strip()
         category = item.get('category', '').strip()
-        if not description or category not in CATEGORY_OPTIONS:
+        if not description or not category:
+            continue
+        try:
+            category = remember_custom_category(category)
+        except ValueError:
             continue
         feedback_entries.append({
             'description': description,
@@ -1208,7 +1293,7 @@ def retrain_model():
     save_feedback_data(feedback_entries)
     ml_model = rebuild_model()
     
-    return jsonify({
+    return safe_jsonify({
         'success': True,
         'message': f'Model retrained with {len(new_training_data)} new examples'
     })
@@ -1238,7 +1323,7 @@ def get_analytics():
     monthly_income = df[df['type'] == 'credit'].groupby('month')['amount'].sum().to_dict()
     monthly_expenses = df[df['type'] == 'debit'].groupby('month')['amount'].apply(lambda x: abs(x.sum())).to_dict()
     
-    return jsonify({
+    return safe_jsonify({
         'balance': balance,
         'total_income': total_income,
         'total_expenses': total_expenses,
@@ -1260,10 +1345,11 @@ def index():
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
-    return jsonify({
+    return safe_jsonify({
         'status': 'healthy',
         'model_loaded': ml_model is not None,
-        'categories': CATEGORY_OPTIONS,
+        'categories': get_category_options(),
+        'custom_categories': load_custom_categories(),
         'confidence_threshold': CONFIDENCE_THRESHOLD,
         'learned_corrections': len(load_feedback_data())
     })

@@ -220,6 +220,21 @@
             background: #dbeafe;
             color: #1e40af;
         }
+
+        .category-select {
+            border: 1px solid #d1d5db;
+            border-radius: 10px;
+            background: #ffffff;
+            color: #1f2937;
+            padding: 8px 10px;
+            font-weight: 600;
+            outline: none;
+        }
+
+        .category-select:focus {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+        }
         
         .amount-credit {
             color: #059669;
@@ -420,6 +435,7 @@
             const [totalExpenses, setTotalExpenses] = useState(0);
             const [isProcessing, setIsProcessing] = useState(false);
             const [activeTab, setActiveTab] = useState('dashboard');
+            const [customCategories, setCustomCategories] = useState([]);
 
             const categoryRules = {
                 'Food & Dining': ['swiggy', 'zomato', 'restaurant', 'cafe', 'food', 'dominos', 'pizza'],
@@ -442,6 +458,30 @@
                     }
                 }
                 return 'Other';
+            };
+
+            const categoryOptions = [...Object.keys(categoryRules).filter(category => category !== 'Other'), ...customCategories, 'Other'];
+
+            const handleCategoryChange = (transactionId, selectedCategory) => {
+                if (selectedCategory === '__custom__') {
+                    const customCategory = window.prompt('Enter your custom category name');
+                    const cleanCategory = (customCategory || '').trim();
+                    if (!cleanCategory) return;
+
+                    setCustomCategories(current => (
+                        current.some(category => category.toLowerCase() === cleanCategory.toLowerCase())
+                            ? current
+                            : [...current, cleanCategory].sort()
+                    ));
+                    setTransactions(current => current.map(txn => (
+                        txn.id === transactionId ? { ...txn, category: cleanCategory, confidence: 1 } : txn
+                    )));
+                    return;
+                }
+
+                setTransactions(current => current.map(txn => (
+                    txn.id === transactionId ? { ...txn, category: selectedCategory, confidence: 1 } : txn
+                )));
             };
 
             const parseUPIStatement = () => {
@@ -674,7 +714,21 @@
                                                 <tr key={txn.id}>
                                                     <td style={{ color: '#6b7280' }}>{txn.date}</td>
                                                     <td style={{ color: '#1f2937' }}>{txn.description}</td>
-                                                    <td><span className="badge">{txn.category}</span></td>
+                                                    <td>
+                                                        <select
+                                                            className="category-select"
+                                                            value={categoryOptions.includes(txn.category) ? txn.category : 'Other'}
+                                                            onChange={(event) => handleCategoryChange(txn.id, event.target.value)}
+                                                        >
+                                                            {categoryOptions.map(category => (
+                                                                <option key={category} value={category}>{category}</option>
+                                                            ))}
+                                                            <option value="__custom__">+ Add custom category</option>
+                                                        </select>
+                                                        {!categoryOptions.includes(txn.category) ? (
+                                                            <span className="badge" style={{ marginLeft: '8px' }}>{txn.category}</span>
+                                                        ) : null}
+                                                    </td>
                                                     <td style={{ color: '#6b7280' }}>{(txn.confidence * 100).toFixed(0)}%</td>
                                                     <td className={txn.type === 'credit' ? 'amount-credit' : 'amount-debit'}>
                                                         {txn.type === 'credit' ? '+' : '-'}₹{Math.abs(txn.amount).toLocaleString()}
