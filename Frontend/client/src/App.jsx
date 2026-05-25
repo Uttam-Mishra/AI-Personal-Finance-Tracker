@@ -22,6 +22,7 @@ import {
   IndianRupee,
   Landmark,
   LayoutDashboard,
+  KeyRound,
   Loader2,
   Lock,
   LogOut,
@@ -322,8 +323,10 @@ function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [error, setError] = useState('');
   const [authError, setAuthError] = useState('');
+  const [authNotice, setAuthNotice] = useState('');
   const [authMode, setAuthMode] = useState('login');
-  const [authForm, setAuthForm] = useState({ name: '', email: '', password: '' });
+  const [authForm, setAuthForm] = useState({ name: '', email: '', password: '', otp: '' });
+  const [pendingRegistration, setPendingRegistration] = useState(null);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualForm, setManualForm] = useState({
@@ -530,24 +533,55 @@ function App() {
   const handleAuthSubmit = async (event) => {
     event.preventDefault();
     setAuthError('');
+    setAuthNotice('');
     setIsAuthLoading(true);
 
     try {
-      const response = await fetch(`${API_BASE}/api/auth/${authMode}`, {
+      const isOtpVerification = authMode === 'verify-otp';
+      const authEndpoint = isOtpVerification ? 'verify-otp' : authMode;
+      const requestBody = isOtpVerification
+        ? {
+            email: pendingRegistration?.email || authForm.email,
+            otp: authForm.otp
+          }
+        : authForm;
+      const response = await fetch(`${API_BASE}/api/auth/${authEndpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(authForm)
+        body: JSON.stringify(requestBody)
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(payload?.error || 'Authentication failed.');
       }
 
+      if (authMode === 'register' && payload?.otp_required) {
+        setPendingRegistration({
+          email: payload.email || authForm.email,
+          demoOtp: payload.demo_otp || '',
+          expiresInMinutes: payload.expires_in_minutes || 10
+        });
+        setAuthForm((current) => ({
+          ...current,
+          email: payload.email || current.email,
+          password: '',
+          otp: ''
+        }));
+        setAuthMode('verify-otp');
+        setAuthNotice(payload?.message || 'OTP generated. Enter the code to finish creating your account.');
+        return;
+      }
+
+      if (!payload?.user || !payload?.token) {
+        throw new Error(payload?.message || 'Authentication response was incomplete.');
+      }
+
       localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user: payload.user, token: payload.token }));
       setCurrentUser(payload.user);
-      setAuthForm({ name: '', email: '', password: '' });
+      setAuthForm({ name: '', email: '', password: '', otp: '' });
+      setPendingRegistration(null);
     } catch (err) {
-      if (err?.message?.toLowerCase?.().includes('fetch')) {
+      if (authMode !== 'verify-otp' && err?.message?.toLowerCase?.().includes('fetch')) {
         const offlineUser = {
           id: `local-${Date.now()}`,
           name: authForm.name || authForm.email?.split('@')[0] || 'Uttam',
@@ -561,6 +595,50 @@ function App() {
     } finally {
       setIsAuthLoading(false);
     }
+  };
+
+  const handleResendOtp = async () => {
+    const email = pendingRegistration?.email || authForm.email;
+    if (!email) {
+      setAuthError('Email is required before resending OTP.');
+      return;
+    }
+
+    setAuthError('');
+    setAuthNotice('');
+    setIsAuthLoading(true);
+
+    try {
+      const response = await fetch(`${API_BASE}/api/auth/resend-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Could not resend OTP.');
+      }
+
+      setPendingRegistration({
+        email: payload.email || email,
+        demoOtp: payload.demo_otp || '',
+        expiresInMinutes: payload.expires_in_minutes || 10
+      });
+      setAuthForm((current) => ({ ...current, otp: '' }));
+      setAuthNotice(payload?.message || 'A new OTP has been generated.');
+    } catch (err) {
+      setAuthError(err?.message || 'Could not resend OTP right now.');
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
+  const handleSwitchAuthMode = () => {
+    setAuthMode((current) => (current === 'login' ? 'register' : 'login'));
+    setAuthForm({ name: '', email: '', password: '', otp: '' });
+    setPendingRegistration(null);
+    setAuthError('');
+    setAuthNotice('');
   };
 
   const handleLogout = () => {
@@ -780,8 +858,12 @@ function App() {
         authForm={authForm}
         setAuthForm={setAuthForm}
         authError={authError}
+        authNotice={authNotice}
+        pendingRegistration={pendingRegistration}
         isAuthLoading={isAuthLoading}
         handleAuthSubmit={handleAuthSubmit}
+        handleResendOtp={handleResendOtp}
+        handleSwitchAuthMode={handleSwitchAuthMode}
         darkMode={darkMode}
         setDarkMode={setDarkMode}
       />
@@ -1029,12 +1111,20 @@ function AuthScreen({
   authForm,
   setAuthForm,
   authError,
+  authNotice,
+  pendingRegistration,
   isAuthLoading,
   handleAuthSubmit,
+  handleResendOtp,
+  handleSwitchAuthMode,
   darkMode,
   setDarkMode
 }) {
   const isRegister = authMode === 'register';
+  const isOtpStep = authMode === 'verify-otp';
+  const authTitle = isOtpStep ? 'Verify your account' : isRegister ? 'Start tracking smarter' : 'Login to continue';
+  const authEyebrow = isOtpStep ? 'Enter OTP' : isRegister ? 'Create account' : 'Welcome back';
+  const submitText = isOtpStep ? 'Verify account' : isRegister ? 'Create account' : 'Login';
 
   return (
     <div className={`app-root auth-root ${darkMode ? 'dark' : ''}`}>
@@ -1090,8 +1180,8 @@ function AuthScreen({
         <section className="auth-card">
           <div className="auth-card-head">
             <div>
-              <span className="eyebrow">{isRegister ? 'Create account' : 'Welcome back'}</span>
-              <h2>{isRegister ? 'Start tracking smarter' : 'Login to continue'}</h2>
+              <span className="eyebrow">{authEyebrow}</span>
+              <h2>{authTitle}</h2>
             </div>
             <button
               type="button"
@@ -1124,26 +1214,75 @@ function AuthScreen({
                 <input
                   type="email"
                   required
+                  disabled={isOtpStep}
                   value={authForm.email}
                   onChange={(event) => setAuthForm((current) => ({ ...current, email: event.target.value }))}
                   placeholder="you@example.com"
                 />
               </div>
             </label>
-            <label className="form-field">
-              <span>Password</span>
-              <div>
-                <Lock size={17} />
-                <input
-                  type="password"
-                  required
-                  minLength={4}
-                  value={authForm.password}
-                  onChange={(event) => setAuthForm((current) => ({ ...current, password: event.target.value }))}
-                  placeholder="Minimum 4 characters"
-                />
+            {isOtpStep ? (
+              <>
+                <label className="form-field">
+                  <span>OTP</span>
+                  <div>
+                    <KeyRound size={17} />
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]{6}"
+                      required
+                      maxLength={6}
+                      value={authForm.otp}
+                      onChange={(event) =>
+                        setAuthForm((current) => ({
+                          ...current,
+                          otp: event.target.value.replace(/\D/g, '').slice(0, 6)
+                        }))
+                      }
+                      placeholder="6-digit code"
+                    />
+                  </div>
+                </label>
+                {pendingRegistration?.demoOtp ? (
+                  <div className="auth-otp-hint">
+                    <span>Demo OTP</span>
+                    <button
+                      type="button"
+                      onClick={() => setAuthForm((current) => ({ ...current, otp: pendingRegistration.demoOtp }))}
+                    >
+                      {pendingRegistration.demoOtp}
+                    </button>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <label className="form-field">
+                <span>Password</span>
+                <div>
+                  <Lock size={17} />
+                  <input
+                    type="password"
+                    required
+                    minLength={4}
+                    value={authForm.password}
+                    onChange={(event) => setAuthForm((current) => ({ ...current, password: event.target.value }))}
+                    placeholder="Minimum 4 characters"
+                  />
+                </div>
+              </label>
+            )}
+            {authNotice ? (
+              <div className="auth-notice compact">
+                <ShieldCheck size={17} />
+                <span>
+                  {authNotice}
+                  {pendingRegistration?.expiresInMinutes
+                    ? ` Expires in ${pendingRegistration.expiresInMinutes} minutes.`
+                    : ''}
+                </span>
               </div>
-            </label>
+            ) : null}
             {authError ? (
               <div className="error-banner compact">
                 <AlertTriangle size={17} />
@@ -1152,18 +1291,21 @@ function AuthScreen({
             ) : null}
             <button type="submit" className="primary-action auth-submit" disabled={isAuthLoading}>
               {isAuthLoading ? <Loader2 size={18} className="spin" /> : <ShieldCheck size={18} />}
-              {isAuthLoading ? 'Please wait' : isRegister ? 'Create account' : 'Login'}
+              {isAuthLoading ? 'Please wait' : submitText}
             </button>
           </form>
 
+          {isOtpStep ? (
+            <button type="button" className="auth-switch" onClick={handleResendOtp} disabled={isAuthLoading}>
+              Resend OTP
+            </button>
+          ) : null}
           <button
             type="button"
             className="auth-switch"
-            onClick={() => {
-              setAuthMode(isRegister ? 'login' : 'register');
-            }}
+            onClick={handleSwitchAuthMode}
           >
-            {isRegister ? 'Already have an account? Login' : 'New here? Create account'}
+            {isRegister || isOtpStep ? 'Already have an account? Login' : 'New here? Create account'}
           </button>
         </section>
       </motion.main>

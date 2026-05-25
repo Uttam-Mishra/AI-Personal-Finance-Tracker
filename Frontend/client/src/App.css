@@ -1410,6 +1410,11 @@
   font-weight: 750;
 }
 
+.form-field input:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
 .auth-submit {
   width: 100%;
 }
@@ -1434,6 +1439,45 @@
   padding: 11px 12px;
   border-radius: 16px;
   font-size: 13px;
+}
+
+.auth-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #065f46;
+  border: 1px solid rgba(16, 185, 129, 0.24);
+  background: rgba(209, 250, 229, 0.78);
+  font-weight: 800;
+}
+
+.auth-otp-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px dashed rgba(37, 99, 235, 0.28);
+  border-radius: 16px;
+  background: rgba(219, 234, 254, 0.55);
+  padding: 12px;
+}
+
+.auth-otp-hint span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.auth-otp-hint button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 12px;
+  background: #1d4ed8;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  padding: 0 12px;
 }
 
 .secondary-action,
