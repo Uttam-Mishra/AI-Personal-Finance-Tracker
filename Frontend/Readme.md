@@ -10,6 +10,7 @@ A smart web application that automatically tracks and categorizes your UPI trans
 - **📊 Interactive Dashboard**: Real-time balance, income, and expense tracking
 - **📈 Visual Analytics**: Charts for monthly trends, category distribution, and spending patterns
 - **💡 Smart Insights**: AI-powered financial insights and recommendations
+- **🔐 OTP Verification**: Generate a short-lived OTP before creating a new user account
 
 ### 🎯 ML Categories
 1. Food & Dining
@@ -185,6 +186,7 @@ Pipeline([
 
 - PDFs are processed server-side and deleted immediately
 - No transaction data is stored permanently (add database for production)
+- New account registrations are held pending until the generated OTP is verified
 - CORS enabled for development (configure for production)
 - Input validation on all endpoints
 
@@ -192,7 +194,7 @@ Pipeline([
 
 ### Planned Features
 1. **Database Integration** - PostgreSQL/MongoDB for persistent storage
-2. **User Authentication** - Login/signup with JWT
+2. **Email/SMS OTP Delivery** - Send signup OTPs through a production provider
 3. **Budget Setting** - Monthly budgets per category
 4. **Alerts & Notifications** - Overspending warnings
 5. **Export Features** - Download as CSV/Excel

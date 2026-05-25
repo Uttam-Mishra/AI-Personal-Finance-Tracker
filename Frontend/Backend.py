@@ -12,6 +12,7 @@ from werkzeug.utils import secure_filename
 from datetime import datetime
 import hashlib
 import pandas as pd
+import secrets
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
@@ -45,10 +46,13 @@ RUNTIME_DATA_DIR = os.path.join(BASE_DIR, 'runtime_data')
 MODEL_PATH = os.path.join(RUNTIME_DATA_DIR, 'transaction_classifier.pkl')
 LEARNED_FEEDBACK_PATH = os.path.join(RUNTIME_DATA_DIR, 'learned_corrections.json')
 USERS_PATH = os.path.join(RUNTIME_DATA_DIR, 'users.json')
+PENDING_OTP_PATH = os.path.join(RUNTIME_DATA_DIR, 'pending_registration_otps.json')
 MANUAL_TRANSACTIONS_PATH = os.path.join(RUNTIME_DATA_DIR, 'manual_transactions.json')
 CUSTOM_CATEGORIES_PATH = os.path.join(RUNTIME_DATA_DIR, 'custom_categories.json')
 UPLOADS_DIR = os.path.join(BASE_DIR, 'uploads')
 CONFIDENCE_THRESHOLD = 0.6
+REGISTRATION_OTP_TTL_MINUTES = 10
+REGISTRATION_OTP_MAX_ATTEMPTS = 5
 DEFAULT_PORT = int(os.environ.get('PORT', 5001))
 OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-5-mini')
 
@@ -266,6 +270,45 @@ def _hash_password(password):
 def _auth_token(email):
     token_seed = f"{email}:{os.environ.get('AUTH_SECRET', 'finance-tracker-demo-secret')}"
     return hashlib.sha256(token_seed.encode('utf-8')).hexdigest()
+
+
+def _otp_secret():
+    return os.environ.get('OTP_SECRET') or os.environ.get('AUTH_SECRET', 'finance-tracker-demo-secret')
+
+
+def _hash_otp(email, otp):
+    otp_seed = f"{email}:{otp}:{_otp_secret()}"
+    return hashlib.sha256(otp_seed.encode('utf-8')).hexdigest()
+
+
+def _generate_otp():
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def _otp_expires_at():
+    expires_at = datetime.utcnow().timestamp() + (REGISTRATION_OTP_TTL_MINUTES * 60)
+    return datetime.utcfromtimestamp(expires_at).isoformat(timespec='seconds')
+
+
+def _is_expired_otp(entry):
+    try:
+        expires_at = datetime.fromisoformat(entry.get('expires_at', ''))
+    except (TypeError, ValueError):
+        return True
+    return datetime.utcnow() > expires_at
+
+
+def _prune_expired_otps(pending):
+    return {
+        email: entry
+        for email, entry in pending.items()
+        if isinstance(entry, dict) and not _is_expired_otp(entry)
+    }
+
+
+def _demo_otp_payload(otp):
+    include_demo_otp = os.environ.get('INCLUDE_DEMO_OTP', 'true').strip().lower() != 'false'
+    return {'demo_otp': otp} if include_demo_otp else {}
 
 
 def _public_user(user):
@@ -1104,7 +1147,7 @@ def upload_statement():
 
 @app.route('/api/auth/register', methods=['POST'])
 def register_user():
-    """Simple demo registration for project login."""
+    """Generate a registration OTP before creating a new account."""
     data = request.json or {}
     name = data.get('name', '').strip()
     email = data.get('email', '').strip().lower()
@@ -1117,20 +1160,126 @@ def register_user():
     if any(user.get('email') == email for user in users):
         return jsonify({'error': 'Account already exists. Please login.'}), 409
 
-    user = {
-        'id': hashlib.sha256(email.encode('utf-8')).hexdigest()[:16],
+    if len(password) < 4:
+        return jsonify({'error': 'Password must be at least 4 characters.'}), 400
+
+    otp = _generate_otp()
+    pending_otps = _prune_expired_otps(_load_json_file(PENDING_OTP_PATH, {}))
+    pending_otps[email] = {
         'name': name or email.split('@')[0],
         'email': email,
         'password_hash': _hash_password(password),
-        'created_at': datetime.utcnow().isoformat(timespec='seconds')
+        'otp_hash': _hash_otp(email, otp),
+        'attempts': 0,
+        'created_at': datetime.utcnow().isoformat(timespec='seconds'),
+        'expires_at': _otp_expires_at()
+    }
+    _save_json_file(PENDING_OTP_PATH, pending_otps)
+
+    # This project does not include an email/SMS provider yet, so local/demo
+    # builds can read the generated OTP from the response.
+    return jsonify({
+        'success': True,
+        'otp_required': True,
+        'email': email,
+        'expires_in_minutes': REGISTRATION_OTP_TTL_MINUTES,
+        'message': 'OTP generated. Verify it to finish creating your account.',
+        **_demo_otp_payload(otp)
+    })
+
+
+@app.route('/api/auth/verify-otp', methods=['POST'])
+def verify_registration_otp():
+    """Verify the registration OTP and create the account."""
+    data = request.json or {}
+    email = data.get('email', '').strip().lower()
+    otp = str(data.get('otp', '')).strip()
+
+    if not email or not otp:
+        return jsonify({'error': 'Email and OTP are required.'}), 400
+    if not re.fullmatch(r'\d{6}', otp):
+        return jsonify({'error': 'OTP must be a 6-digit code.'}), 400
+
+    pending_otps = _prune_expired_otps(_load_json_file(PENDING_OTP_PATH, {}))
+    entry = pending_otps.get(email)
+    if not entry:
+        _save_json_file(PENDING_OTP_PATH, pending_otps)
+        return jsonify({'error': 'OTP expired or not requested. Please create the account again.'}), 400
+
+    if int(entry.get('attempts', 0)) >= REGISTRATION_OTP_MAX_ATTEMPTS:
+        pending_otps.pop(email, None)
+        _save_json_file(PENDING_OTP_PATH, pending_otps)
+        return jsonify({'error': 'Too many incorrect OTP attempts. Please create the account again.'}), 429
+
+    if entry.get('otp_hash') != _hash_otp(email, otp):
+        entry['attempts'] = int(entry.get('attempts', 0)) + 1
+        pending_otps[email] = entry
+        _save_json_file(PENDING_OTP_PATH, pending_otps)
+        remaining = max(REGISTRATION_OTP_MAX_ATTEMPTS - entry['attempts'], 0)
+        return jsonify({'error': f'Invalid OTP. {remaining} attempts left.'}), 400
+
+    users = _load_json_file(USERS_PATH, [])
+    if any(user.get('email') == email for user in users):
+        pending_otps.pop(email, None)
+        _save_json_file(PENDING_OTP_PATH, pending_otps)
+        return jsonify({'error': 'Account already exists. Please login.'}), 409
+
+    user = {
+        'id': hashlib.sha256(email.encode('utf-8')).hexdigest()[:16],
+        'name': entry.get('name') or email.split('@')[0],
+        'email': email,
+        'password_hash': entry['password_hash'],
+        'verified_at': datetime.utcnow().isoformat(timespec='seconds'),
+        'created_at': entry.get('created_at') or datetime.utcnow().isoformat(timespec='seconds')
     }
     users.append(user)
+    pending_otps.pop(email, None)
     _save_json_file(USERS_PATH, users)
+    _save_json_file(PENDING_OTP_PATH, pending_otps)
 
     return jsonify({
         'success': True,
         'user': _public_user(user),
-        'token': _auth_token(email)
+        'token': _auth_token(email),
+        'message': 'Account verified successfully.'
+    })
+
+
+@app.route('/api/auth/resend-otp', methods=['POST'])
+def resend_registration_otp():
+    """Generate a fresh OTP for an in-progress account registration."""
+    data = request.json or {}
+    email = data.get('email', '').strip().lower()
+
+    if not email:
+        return jsonify({'error': 'Email is required.'}), 400
+
+    users = _load_json_file(USERS_PATH, [])
+    if any(user.get('email') == email for user in users):
+        return jsonify({'error': 'Account already exists. Please login.'}), 409
+
+    pending_otps = _prune_expired_otps(_load_json_file(PENDING_OTP_PATH, {}))
+    entry = pending_otps.get(email)
+    if not entry:
+        _save_json_file(PENDING_OTP_PATH, pending_otps)
+        return jsonify({'error': 'No pending registration found. Please create the account again.'}), 400
+
+    otp = _generate_otp()
+    entry.update({
+        'otp_hash': _hash_otp(email, otp),
+        'attempts': 0,
+        'expires_at': _otp_expires_at()
+    })
+    pending_otps[email] = entry
+    _save_json_file(PENDING_OTP_PATH, pending_otps)
+
+    return jsonify({
+        'success': True,
+        'otp_required': True,
+        'email': email,
+        'expires_in_minutes': REGISTRATION_OTP_TTL_MINUTES,
+        'message': 'A new OTP has been generated.',
+        **_demo_otp_payload(otp)
     })
 
 
