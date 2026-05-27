@@ -11,13 +11,12 @@ import json
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import hashlib
-import pandas as pd
 import secrets
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
-import joblib
 import os
+import joblib
 from typing import List, Tuple
 
 try:
@@ -1454,24 +1453,35 @@ def get_analytics():
     
     if not transactions:
         return jsonify({'error': 'No transactions provided'}), 400
-    
-    df = pd.DataFrame(transactions)
-    
-    # Calculate metrics
-    total_income = df[df['type'] == 'credit']['amount'].sum()
-    total_expenses = abs(df[df['type'] == 'debit']['amount'].sum())
+
+    total_income = 0
+    debit_total = 0
+    category_spending = {}
+    monthly_income = {}
+    monthly_expenses = {}
+
+    for transaction in transactions:
+        txn_type = str(transaction.get('type', '')).lower()
+        try:
+            amount = float(transaction.get('amount', 0) or 0)
+        except (TypeError, ValueError):
+            amount = 0
+
+        month = str(transaction.get('date', ''))[:7] or 'Unknown'
+        category = transaction.get('category') or 'Other'
+
+        if txn_type == 'credit':
+            total_income += amount
+            monthly_income[month] = monthly_income.get(month, 0) + amount
+        elif txn_type == 'debit':
+            debit_total += amount
+            absolute_amount = abs(amount)
+            category_spending[category] = category_spending.get(category, 0) + absolute_amount
+            monthly_expenses[month] = monthly_expenses.get(month, 0) + absolute_amount
+
+    total_expenses = abs(debit_total)
     balance = total_income - total_expenses
-    
-    # Category-wise spending
-    expense_df = df[df['type'] == 'debit'].copy()
-    expense_df['amount'] = expense_df['amount'].abs()
-    category_spending = expense_df.groupby('category')['amount'].sum().to_dict()
-    
-    # Monthly trends
-    df['month'] = pd.to_datetime(df['date']).dt.to_period('M').astype(str)
-    monthly_income = df[df['type'] == 'credit'].groupby('month')['amount'].sum().to_dict()
-    monthly_expenses = df[df['type'] == 'debit'].groupby('month')['amount'].apply(lambda x: abs(x.sum())).to_dict()
-    
+
     return safe_jsonify({
         'balance': balance,
         'total_income': total_income,
