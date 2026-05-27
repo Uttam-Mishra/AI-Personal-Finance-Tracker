@@ -11,7 +11,7 @@ AI Personal Finance Tracker is a full-stack web app that reads UPI statement PDF
 - Flag low-confidence predictions as `Unknown`
 - Let users correct unknown transactions
 - Learn from user corrections for future categorization
-- Verify new accounts with a generated OTP before account creation
+- Create accounts and log users in directly from the signup screen
 - Show dashboard totals, category splits, and monthly trends
 - Use demo data when you want to preview the UI quickly
 
@@ -72,11 +72,8 @@ The backend now writes generated files into `/Users/uttammishra/IP PROJECT/Front
 - `transaction_classifier.pkl`
 - `learned_corrections.json`
 - `users.json`
-- `pending_registration_otps.json`
 
 Uploaded PDFs are stored temporarily in `/Users/uttammishra/IP PROJECT/Frontend/uploads`, which is also ignored by Git.
-
-Registration now uses a two-step API flow: `POST /api/auth/register` generates a 10-minute OTP, and `POST /api/auth/verify-otp` creates the account after the code is verified. Demo builds include the generated OTP in the response as `demo_otp`; set `INCLUDE_DEMO_OTP=false` when wiring a real email/SMS provider.
 
 ## Android App
 
