@@ -836,14 +836,21 @@ def _extract_text_via_ocr(pdf_path: str) -> Tuple[List[str], str]:
         return [], OCR_IMPORT_ERROR or 'OCR dependencies are missing.'
 
     try:
-        images = convert_from_path(pdf_path, dpi=300)
+        with pdfplumber.open(pdf_path) as pdf:
+            page_count = len(pdf.pages)
     except Exception as exc:
         return [], str(exc)
 
     lines: List[str] = []
-    for image in images:
+    for page_number in range(1, page_count + 1):
         try:
-            text = pytesseract.image_to_string(image)
+            images = convert_from_path(
+                pdf_path,
+                dpi=180,
+                first_page=page_number,
+                last_page=page_number
+            )
+            text = pytesseract.image_to_string(images[0]) if images else ''
         except Exception as exc:
             return [], str(exc)
         if text:
