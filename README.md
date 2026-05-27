@@ -63,6 +63,8 @@ Frontend runs on `http://localhost:3000`.
 - Start command: `gunicorn --bind 0.0.0.0:$PORT Backend:app`
 - Health check path: `/api/health`
 
+The default Render setup is a lightweight backend for text-based PDFs. Scanned/image PDFs need OCR, which requires extra Python and system packages. For OCR deployment, use `/Users/uttammishra/IP PROJECT/Frontend/Dockerfile` on Railway, Fly.io, or any Docker host. It installs `tesseract-ocr`, `poppler-utils`, and `requirements-ocr.txt`.
+
 ## Important Runtime Files
 
 The backend now writes generated files into `/Users/uttammishra/IP PROJECT/Frontend/runtime_data`, which is ignored by Git:
